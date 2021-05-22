@@ -1,0 +1,15 @@
+# pre-compiled Python code caches.
+__pycache__/
+
+# pytest pre-compiled cache.
+.pytest_cache
+
+# artifacts from running 'coverage'
+.coverage
+htmlcov/
+
+# Python egg metadata.
+python/iwp.egg-info/
+
+# Jupyter notebook checkpoints.
+.ipynb_checkpoints/
