@@ -1,0 +1,5 @@
+cudatoolkit=11.1.74
+netCDF4
+numpy
+pytorch=1.8.1
+torchvision
