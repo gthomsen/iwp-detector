@@ -8,6 +8,8 @@ The following packages are required:
 * CUDA
 * PyTorch
 * NetCDF4
+* Dask
+* xarray
 
 The following versions have been tested and are explicitly set in the
 `requirements.txt` file referenced below:

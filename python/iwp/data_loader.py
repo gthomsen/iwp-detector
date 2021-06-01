@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-import copy
 import collections.abc
-import torch
-import torch.utils.data.dataset
+import copy
 import netCDF4
 import numpy as np
+import torch
+import torch.utils.data.dataset
+import xarray as xr
 
 # XXX: add interface to get the time and slice indices from the data object?
 #      this changes how the tests should be structured as there is far fewer
@@ -417,3 +418,46 @@ class IWPDataset( torch.utils.data.dataset.Dataset ):
             xy_slice[variable_index, :] = self._netcdf_files[time_index_index][variable_name][xy_slice_index, :]
 
         return xy_slice
+
+def open_xarray_dataset( dataset_path_pattern ):
+    """
+    Takes 1 argument:
+
+      dataset_path_pattern -
+
+    Returns 1 value;
+
+      dataset -
+
+    """
+
+    def add_timestep_as_coord( ds ):
+        """
+        Adds the time step as a coordinate so it may be properly concatenated
+        when accessed as a multi-file data set.
+
+        Takes 1 argument:
+
+          ds - xarray.Dataset to modify.
+
+        Returns 1 value:
+
+          ds - Modified xarray.Dataset with a "Cycle" coordinate added.
+
+        """
+
+        ds.coords["Cycle"] = ds.attrs["Cycle"]
+
+        return ds
+
+    # each timestep is processed independently of the others, so we specify
+    # nested concatenation across Cycles.  we preprocess each dataset as its
+    # read to promote the Cycle attribute to a coordinate so it may be
+    # concatenated.
+    ds = xr.open_mfdataset( dataset_path_pattern,
+                            parallel=True,
+                            combine="nested",
+                            concat_dim=["Cycle"],
+                            preprocess=add_timestep_as_coord )
+
+    return ds
