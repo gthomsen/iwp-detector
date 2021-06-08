@@ -8,5 +8,9 @@ setup(
     description="Internal Wave Packet Tools",
     url="https://github.com/gthomsen/iwp",
     author="Greg Thomsen",
-    packages=find_packages( include=["iwp"] )
+    packages=find_packages( include=["iwp"] ),
+    scripts=[
+        "iwp/scripts/scalabel_extract_iwp_labels.py",
+        "iwp/scripts/scalabel_generate_playlist.py"
+    ]
     )
