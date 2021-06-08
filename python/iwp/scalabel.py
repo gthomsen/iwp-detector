@@ -1,7 +1,7 @@
 import copy
 import json
 
-import labels
+import iwp.labels
 
 # module for all things related to Scalabel frames.
 
@@ -342,7 +342,7 @@ def set_iwp_labels( scalabel_frames, iwp_labels_path=None ):
     # load the IWP labels if they were supplied.  otherwise we use an empty set
     # of labels and ultimately remove the Scalabel frames' labels.
     if iwp_labels_path is not None:
-        iwp_labels = labels.load_iwp_labels( iwp_labels_path )
+        iwp_labels = iwp.labels.load_iwp_labels( iwp_labels_path )
     else:
         iwp_labels = []
 
@@ -358,7 +358,7 @@ def set_iwp_labels( scalabel_frames, iwp_labels_path=None ):
     for iwp_label in iwp_labels:
 
         # get the key that locates this IWP in time and space.
-        label_key = labels.get_iwp_label_key( iwp_label )
+        label_key = iwp.labels.get_iwp_label_key( iwp_label )
         label_id  = iwp_label["id"]
 
         # track this label in our map.  take care to detect malformed labels
@@ -394,7 +394,7 @@ def set_iwp_labels( scalabel_frames, iwp_labels_path=None ):
         if frame_key not in labels_map:
             scalabel_frame["labels"] = []
         else:
-            scalabel_frame["labels"] = labels.convert_labels_iwp_to_scalabel( labels_map[frame_key]["labels"] )
+            scalabel_frame["labels"] = iwp.labels.convert_labels_iwp_to_scalabel( labels_map[frame_key]["labels"] )
 
     return scalabel_frames
 
