@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 
 import iwp.labels
 
@@ -157,7 +158,8 @@ def build_scalabel_frames( experiment_name,
                            data_root,
                            data_suffix,
                            url_prefix,
-                           component_count ):
+                           component_count,
+                           check_data_flag=False ):
     """
     Builds a sequence of minimal, Scalabel frames according to the slice metadata provided.
     Frames are constructed in (Z, time, variable) order with right-most dimensions moving
@@ -171,7 +173,10 @@ def build_scalabel_frames( experiment_name,
     frame names are constructed by build_slice_name().  Frame URLs are constructed by
     build_slice_path() and build_slice_url().
 
-    Takes 8 arguments:
+    Raises FileNotFoundError if a datum associated with a generated frame does not
+    exist and the caller requested verification.
+
+    Takes 9 arguments:
 
       experiment_name - Name of the experiment that generated the underlying frame
                         data.
@@ -183,6 +188,10 @@ def build_scalabel_frames( experiment_name,
       url_prefix      - URL prefix to use for each frame's URL.
       component_count - Number of components to strip off of the computed slice path
                         when building the frame's URL.
+      check_data_flag - Optional boolean specifying whether individual frames datum's
+                        will be checked for existence.  If True and the underlying
+                        datum does not exist, FileNotFoundError is raised.  If
+                        omitted, defaults to False.
 
     Returns 1 value:
 
@@ -221,6 +230,15 @@ def build_scalabel_frames( experiment_name,
                 slice_url  = build_slice_url( url_prefix,
                                               slice_path,
                                               component_count )
+
+                if check_data_flag and not os.path.exists( slice_path ):
+                    raise FileNotFoundError( "Scalabel frame's datum does not exist! "
+                                             "({:s}, {:s}, {:s}, (T={:d}, Z={:d}))".format(
+                                                 slice_path,
+                                                 experiment_name,
+                                                 variable_name,
+                                                 time_index,
+                                                 xy_slice_index ) )
 
                 # create a frame with minimal metadata.
                 scalabel_frame = {
