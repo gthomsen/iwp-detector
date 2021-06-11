@@ -453,6 +453,17 @@ def open_xarray_dataset( dataset_path_pattern ):
 
         return ds
 
+    # flatten a list of a single entry into a string.
+    #
+    # NOTE: this is required to be compatible with xarray's open_mfdataset()
+    #       interface.  version 0.18.0 does not allow a list of patterns, but
+    #       only a list of paths.  this provides a convenience for the case
+    #       where a single pattern is provided, but the caller did not attempt
+    #       to detect whether it was a pattern or a path.
+    #
+    if (type( dataset_path_pattern ) == list) and (len( dataset_path_pattern ) == 1):
+        dataset_path_pattern = dataset_path_pattern[0]
+
     # each timestep is processed independently of the others, so we specify
     # nested concatenation across Cycles.  we preprocess each dataset as its
     # read to promote the Cycle attribute to a coordinate so it may be
