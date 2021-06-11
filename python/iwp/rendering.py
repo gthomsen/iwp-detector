@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image, ImageDraw
 
-import statistics
+import iwp.statistics
 
 def array_to_pixels( array, quantization_table, color_map, scaler=1 ):
     """
@@ -218,7 +218,7 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
         # compute local statistics on this slice if they're being normalized
         # independently rather than across an entire dataset.
         if data_limits is None:
-            local_data_limits  = statistics.compute_statistics( da[0, z_index, :] )
+            local_data_limits  = iwp.statistics.compute_statistics( da[0, z_index, :] )
             quantization_table = quantization_table_builder( number_table_entries,
                                                              *local_data_limits )
 
