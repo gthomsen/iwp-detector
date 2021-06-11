@@ -11,6 +11,7 @@ setup(
     packages=find_packages( include=["iwp"] ),
     scripts=[
         "iwp/scripts/iwp_compute_statistics.py",
+        "iwp/scripts/iwp_create_labeling_data.py",
         "iwp/scripts/scalabel_extract_iwp_labels.py",
         "iwp/scripts/scalabel_generate_playlist.py"
     ]
