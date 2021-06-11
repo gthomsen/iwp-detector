@@ -1,4 +1,5 @@
 import numpy as np
+import os
 from PIL import Image, ImageDraw
 
 import iwp.statistics
@@ -231,3 +232,127 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
                                         verbose_flag )
 
     return da
+
+def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, time_step_indices, xy_slice_indices, data_limits, color_map, quantization_table_builder, work_chunk_size=30, title_flag=True, verbose_flag=False ):
+    """
+    Creates on-disk images for each of the XY slices in a subset of the supplied dataset.
+    A subset of time, XY slices, and variables are normalized, quantized, and colorized
+    before rendering to images and written to disk.
+
+    See da_write_xy_slice_images() for details on where images are written.
+
+    Normalization is done via supplied statistics (typically pre-computed, global
+    statistics) or with computed on demand for per-XY slice statistics.  Quantization
+    is performed with a caller supplied table, as is colorization.
+
+    Metadata information may be "burned in" to the images created for easy diagnostics
+    when additional supporting information (e.g. file path) is not available.
+
+    Image creation may be done in parallel and is distributed into chunks to avoid
+    exhausting system resources.
+
+    Takes 12 arguments:
+
+      ds                         - xarray.Dataset or xarray.DataArray to create XY slice images
+                                   from.
+      output_root                - On-disk path specifying where XY slice images are written.
+      experiment_name            - Name of the experiment associated with the XY slices.  Used
+                                   to construct the path for each XY slice's on-disk image.
+      variable_names             - Sequence of variable names to generate images for.
+      time_step_indices          - Sequence of time step indices to generate images for.
+      xy_slice_indices           - Sequence of XY slice indices to generate images for.
+      data_limits                - Tuple providing (minimum, maximum, standard deviation) of
+                                   da to support global normalization.  If specified as None,
+                                   data_limits are computed for each XY slice to support local,
+                                   per-slice normalization.
+      color_map                  - Matplotlib color map to apply to the underlying data.
+      quantization_table_builder - Function that generates a quantization table when supplied
+                                   four arguments: number of quantization levels, data minimum,
+                                   data maximum, and data standard deviation.  If data_limits
+                                   is specified, then this is called once per functor execution,
+                                   otherwise it is called once per XY slice with local data limits.
+      work_chunk_size            - Optional positive integer specifying the chunk size of
+                                   work to distribute when rendering images.  This is
+                                   a crude means to balance compute workload against memory
+                                   footprint.  If omitted, defaults to 30.
+
+                                   NOTE: This interface will likely change in the future.
+
+      title_flag                 - Optional boolean specifying whether images should have
+                                   slice metadata burned into the image or not, allowing
+                                   for visual identification of the slice when its on-disk
+                                   path is unknown.  If omitted, defaults to True.
+      verbose_flag               - Optional boolean specifying whether execution should be
+                                   verbose.  If specified as True, diagnostic messages are
+                                   printed to standard output during execution.  If omitted,
+                                   defaults to False.
+
+    Returns nothing.
+
+    """
+
+    # size up the amount of work we have in the time dimension.
+    number_time_steps = len( time_step_indices )
+
+    if verbose_flag:
+        print( "Rendering XY slices for '{:s}'.".format(
+            experiment_name ) )
+
+    # iterate through each of the variables.  this is our outer loop so that
+    # data for a single variable is completely rendered before moving to the
+    # next.
+    for variable_name in variable_names:
+
+        # ensure that the directory structure this variable will write to exists.
+        os.makedirs( "{:s}/{:s}".format( output_root, variable_name ),
+                     exist_ok=True )
+
+        if verbose_flag:
+            print( "    {:s}".format( variable_name ) )
+
+        # acquire this variable's statistics if they were provided.  if they
+        # were not provided, they'll be computed on the fly when rendering the
+        # images.
+        if data_limits is not None:
+            variable_statistics = data_limits[variable_name]
+        else:
+            variable_statistics = None
+
+        # iterate through the time steps in chunks.  we map from array indices
+        # to time step indices below when we subset the dataset.
+        #
+        # NOTE: we break up the work into (untuned) chunks to avoid exhausting
+        #       the system's memory and triggering an OOM event.  if we were
+        #       smarter about the underlying distributed computation system
+        #       we would simply map the function across the xarray.Dataaset.
+        #
+        for chunk_start_index in range( 0, number_time_steps, work_chunk_size ):
+            chunk_end_index = min( chunk_start_index + work_chunk_size,
+                                   number_time_steps )
+
+            current_time_step_indices = time_step_indices[slice( chunk_start_index,
+                                                                 chunk_end_index )]
+
+            if verbose_flag:
+                print( "        [{:d}:{:d}]".format(
+                    time_step_indices[chunk_start_index],
+                    time_step_indices[chunk_end_index - 1] ) )
+
+            # get a DataArray for the time steps and XY slices of interest for
+            # this variable, and generate images for this variable.
+            da = iwp.utilities.get_xarray_subset( ds,
+                                                  variable_name,
+                                                  current_time_step_indices,
+                                                  xy_slice_indices )
+
+            da.map_blocks( da_write_xy_slice_images,
+                           (output_root,
+                            experiment_name,
+                            xy_slice_indices,
+                            variable_statistics,
+                            color_map,
+                            quantization_table_builder,
+                            title_flag,
+                            verbose_flag) ).compute()
+
+    return
