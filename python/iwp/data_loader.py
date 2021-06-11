@@ -421,13 +421,16 @@ class IWPDataset( torch.utils.data.dataset.Dataset ):
 
 def open_xarray_dataset( dataset_path_pattern ):
     """
+    Opens an IWP dataset as an xarray.Dataset from one or more netCDF4 files.
+
     Takes 1 argument:
 
-      dataset_path_pattern -
+      dataset_path_pattern - Path to the dataset to open.  May include '*' for simple
+                             globbing, or specified as a list of paths to open.
 
     Returns 1 value;
 
-      dataset -
+      dataset - xarray.Dataset associated with dataset_path_pattern.
 
     """
 

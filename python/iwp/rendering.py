@@ -89,6 +89,10 @@ def array_to_image( array, quantization_table, color_map, title_text="" ):
 
 def da_write_single_xy_slice_image( da, output_path, quantization_table, color_map, title_text="", verbose_flag=False ):
     """
+    Functor for creating an on-disk image for a single XY slice of data.  Quantizes
+    the XY slice and applies a color map before writing.  The file format used is
+    determined by the file path specified (e.g. "foo.png" is written as PNG).
+
     Takes 6 arguments:
 
       da                 - xarray DataArray to create XY slice images from.  Each of
@@ -131,9 +135,13 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
     DataArray object.  Iterates across all time steps, variables, and XY slices within
     the DataArray to quantize and apply a color map before writing to disk as a PNG.
 
+    Individual image paths are of the form:
+
+        <output_root>/<variable>/<experiment>-<variable>-z=<z_index>-Nt=<time_index>.png
+
     Takes 9 arguments:
 
-      da                         - xarray DataArray to create XY slice images from.  Each of
+      da                         - xarray.DataArray to create XY slice images from.  Each of
                                    the XY slices, for all time steps and variables, are written
                                    to disk beneath output_root.
       output_root                - On-disk path specifying where XY slice images are written.

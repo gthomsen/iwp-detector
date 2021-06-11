@@ -18,7 +18,7 @@ def compute_statistics( dataset ):
 
     """
 
-    #
+    # compute the minimum, maximum, and standard deviation.
     #
     # NOTE: this reduces over all grid variables as well as time steps.  caller
     #       is responsible for providing the correct dataset.
