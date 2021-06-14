@@ -135,6 +135,12 @@ def build_slice_url( url_prefix, slice_path, number_components=0 ):
 
     path_components = slice_path.split( "/" )
 
+    # handle absolute paths.  these generate an empty component which should be
+    # ignored to make number_components consistent between absolute and relative
+    # paths.
+    if slice_path.startswith( "/" ):
+        path_components = path_components[1:]
+
     if number_components < 0:
         raise ValueError( "Invalid number of components specified! ({})".format(
             number_components ) )
