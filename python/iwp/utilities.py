@@ -23,7 +23,7 @@ def parse_range( range_string ):
 
     # adjust the end so it is inclusive rather than following Python's exclusive
     # semantics.  this makes things less surprising to end users.
-    components[-1] += 1
+    components[1] += 1
 
     try:
         range_object = range( *components )
