@@ -390,3 +390,68 @@ def merge_iwp_labels( iwp_labels_a, iwp_labels_b, merge_type=IWPLabelMergeType.U
                                 key=lambda label: (label["time_step_index"], label["z_index"], label["id"]) )
 
     return merged_iwp_labels
+
+def normalize_iwp_label_coordinates( iwp_labels, width, height, in_place_flag=False ):
+    """
+    Normalizes IWP labels' bounding boxes so they are in the range of [0, 1] instead
+    of an arbitrary width and height.
+
+    See also scale_iwp_label_coordinates().
+
+    Takes 4 arguments:
+
+      iwp_labels    - List of IWP labels whose bounding boxes will be normalized.
+      width         - Numeric width to normalize the bounding boxes' X coordinates.
+      height        - Numeric height to normalize the bounding boxes' Y coordinates.
+      in_place_flag - Optional flag specifying in place update or an update to a
+                      copy of the labels.  If omitted, defaults to False and a new
+                      list of IWP labels is returned.
+
+    Returns 1 value:
+
+      iwp_labels - List of normalized IWP labels.
+
+    """
+
+    if not in_place_flag:
+        iwp_labels = copy.deepcopy( iwp_labels )
+
+    for iwp_label in iwp_labels:
+        iwp_label["bbox"]["x1"] = iwp_label["bbox"]["x1"] / width
+        iwp_label["bbox"]["x2"] = iwp_label["bbox"]["x2"] / width
+        iwp_label["bbox"]["y1"] = iwp_label["bbox"]["y1"] / height
+        iwp_label["bbox"]["y2"] = iwp_label["bbox"]["y2"] / height
+
+    return iwp_labels
+
+def scale_iwp_label_coordinates( iwp_labels, width, height, in_place_flag=False ):
+    """
+    Scales IWP labels' bounding boxes by an arbitrary width and height.
+
+    See also normalize_iwp_label_coordinates().
+
+    Takes 4 arguments:
+
+      iwp_labels    - List of IWP labels whose bounding boxes will be scaled.
+      width         - Numeric width to scale the bounding boxes' X coordinates.
+      height        - Numeric height to scale the bounding boxes' Y coordinates.
+      in_place_flag - Optional flag specifying in place update or an update to a
+                      copy of the labels.  If omitted, defaults to False and a new
+                      list of IWP labels is returned.
+
+    Returns 1 value:
+
+      iwp_labels - List of scaled IWP labels.
+
+    """
+
+    if not in_place_flag:
+        iwp_labels = copy.deepcopy( iwp_labels )
+
+    for iwp_label in iwp_labels:
+        iwp_label["bbox"]["x1"] = iwp_label["bbox"]["x1"] * width
+        iwp_label["bbox"]["x2"] = iwp_label["bbox"]["x2"] * width
+        iwp_label["bbox"]["y1"] = iwp_label["bbox"]["y1"] * height
+        iwp_label["bbox"]["y2"] = iwp_label["bbox"]["y2"] * height
+
+    return iwp_labels
