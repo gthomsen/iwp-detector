@@ -46,7 +46,8 @@ def build_slice_name( experiment_name, variable_name, time_index, xy_slice_index
 def slice_name_to_components( slice_name ):
     """
     Decomposes a slice name into a map of its unique components.  This is the
-    inverse of build_slice_name().
+    inverse of build_slice_name().  Also handles slice_name's which have been
+    converted into a path or URL as a prefix.
 
     Takes 1 argument:
 
@@ -66,11 +67,20 @@ def slice_name_to_components( slice_name ):
 
     slice_components = slice_name.split( "-" )
 
+    # handle slice names that have been turned into paths with extensions.
+    if "." in slice_components[-1]:
+        slice_components[-1] = slice_components[-1].split( "." )[0]
+
+    # map the individual components to their names.
+    #
+    # NOTE: we use negative indexing to handle the case where the experiment
+    #       name may contain one or more hyphens.
+    #
     slice_map = {
-        "experiment":      slice_components[0],
-        "variable":        slice_components[1],
-        "z_index":         slice_components[2].split( "=" )[1],
-        "time_step_index": slice_components[3].split( "=" )[1]
+        "experiment":      "-".join( slice_components[:-3] ),
+        "variable":        slice_components[-3],
+        "z_index":         slice_components[-2].split( "=" )[1],
+        "time_step_index": slice_components[-1].split( "=" )[1]
     }
 
     return slice_map
