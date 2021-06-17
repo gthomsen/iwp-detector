@@ -187,7 +187,7 @@ def parse_command_line( argv ):
     options.time_index_range         = None
     options.title_images_flag        = True
     options.variable_statistics_path = None
-    options.verbose_flag             = 0
+    options.verbose_flag             = False
 
     # parse our command line options.
     try:
