@@ -1,3 +1,7 @@
+import xarray
+
+import iwp.data_loader
+
 def parse_range( range_string ):
     """
     Parse a range object from a string of the form:
@@ -53,16 +57,28 @@ def validate_variables_and_ranges( dataset, variable_names, time_step_indices, x
 
     """
 
+    if isinstance( dataset, (xarray.Dataset, xarray.DataArray) ):
+        truth_time_step_indices = dataset.coords["Cycle"]
+        truth_xy_slice_indices  = dataset.coords["z"]
+        truth_variable_names    = dataset.data_vars
+    elif isinstance( dataset, iwp.data_loader.IWPDataset ):
+        truth_time_step_indices = dataset.time_step_indices()
+        truth_xy_slice_indices  = dataset.xy_slice_indices()
+        truth_variable_names    = dataset.variables()
+    else:
+        raise ValueError( "Unknown type of dataset supplied ({:s})!".format(
+            type( dataset ) ) )
+
     # verify that each of the time step indices provided is the data value of
     # at least one cycle.
     for time_step_index in time_step_indices:
-        if time_step_index not in dataset.coords["Cycle"]:
+        if time_step_index not in truth_time_step_indices:
             raise ValueError( "Time step index {:d} is not present in the dataset.".format(
                 time_step_index ) )
 
     # verify that the XY slice indices map to a valid Z slice.
     for xy_slice_index in xy_slice_indices:
-        if xy_slice_index > len( dataset.coords["z"] ):
+        if xy_slice_index > len( truth_xy_slice_indices ):
             raise ValueError( "XY slice index {:d} is not present in the dataset.".format(
                 xy_slice_index ) )
         elif xy_slice_index < 0:
@@ -73,7 +89,7 @@ def validate_variables_and_ranges( dataset, variable_names, time_step_indices, x
     # check for membership in .data_vars rather than .variables to avoid false
     # positives when coordinate names are provided.
     for variable_name in variable_names:
-        if variable_name not in dataset.data_vars:
+        if variable_name not in truth_variable_names:
             raise ValueError( "'{:s}' is not present in the dataset.".format(
                 variable_name ) )
 
