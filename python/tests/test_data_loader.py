@@ -18,7 +18,6 @@
 #      instead of the indices in the subset.  XXX: define whether the interface
 #      is in the original indices or relative to the subset.
 
-import data_loader
 import itertools
 import netCDF4 as nc
 import numpy as np
@@ -26,7 +25,8 @@ import os
 import pytest
 import random
 import stat
-import tempfile
+
+import iwp.data_loader
 
 class TestSyntheticIWPDataset:
     """
@@ -743,7 +743,7 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when some of the time steps'
         # files are inaccessible.
         with pytest.raises( FileNotFoundError ):
-            nonexistent_dataset = data_loader.IWPDataset( nonexistent_path, range( 1 ) )
+            nonexistent_dataset = iwp.data_loader.IWPDataset( nonexistent_path, range( 1 ) )
 
     @pytest.mark.parametrize( "create_netcdf_files",
                               [( 1, (8,  8,  1), ["u", "v", "w"], "unreadable"),
@@ -797,8 +797,8 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when some of the time steps'
         # files are inaccessible.
         with pytest.raises( PermissionError ):
-            inaccessible_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                           range( parameters["number_time_steps"] ) )
+            inaccessible_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                               range( parameters["number_time_steps"] ) )
 
         # restore the permissions to every file in the dataset.
         for file_index in range( parameters["number_time_steps"] ):
@@ -817,8 +817,8 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when one of the time steps'
         # containing directory is inaccessible.
         with pytest.raises( PermissionError ):
-            inaccessible_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                           range( parameters["number_time_steps"] ) )
+            inaccessible_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                               range( parameters["number_time_steps"] ) )
 
         # restore the permissions to the first time step's containing directory.
         os.chmod( dataset_dirname, current_permissions )
@@ -867,8 +867,8 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when there are inconsistent
         # grid variables.
         with pytest.raises( ValueError ):
-            incorrect_dimensions_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                   range( parameters["number_time_steps"] ) )
+            incorrect_dimensions_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                       range( parameters["number_time_steps"] ) )
 
     @pytest.mark.parametrize( "create_netcdf_files",
                               [(3, (8, 16, 32), ["u", "v", "w"], "missing_variable")],
@@ -901,9 +901,9 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when a nonexistent variable is
         # requested.
         with pytest.raises( ValueError ):
-            missing_variable_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                               range( parameters["number_time_steps"] ),
-                                                               variables=dataset_variables )
+            missing_variable_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                   range( parameters["number_time_steps"] ),
+                                                                   variables=dataset_variables )
 
     @pytest.mark.parametrize( "create_netcdf_files",
                               [(3, (8, 16, 32), ["u", "v", "w"], "inconsistent_variables")],
@@ -940,8 +940,8 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when the variables aren't
         # consistent between individual time step files.
         with pytest.raises( ValueError ):
-            inconsistent_variables_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                     range( number_time_steps ) )
+            inconsistent_variables_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                         range( number_time_steps ) )
 
     @pytest.mark.parametrize( "create_netcdf_files",
                               [(3, (8, 16, 32), ["u", "v", "w"], "missing_grid_variables")],
@@ -981,8 +981,8 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when there aren't any grid
         # variables.
         with pytest.raises( ValueError ):
-            missing_grid_variables_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                     range( number_time_steps ) )
+            missing_grid_variables_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                         range( number_time_steps ) )
 
     @pytest.mark.parametrize( "create_netcdf_files",
                               [(3, (8, 16, 32), ["u", "v", "w"], "integral_grid_variables")],
@@ -1035,8 +1035,8 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when there are integral grid
         # variables in a later time step.
         with pytest.raises( ValueError ):
-            missing_grid_variables_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                     range( parameters["number_time_steps"] ) )
+            missing_grid_variables_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                         range( parameters["number_time_steps"] ) )
 
         # overwrite the first time step with the same integral grid variable so
         # the IWPDataset's default variable list includes it.
@@ -1047,8 +1047,8 @@ class TestSyntheticIWPDataset:
             variables )
 
         with pytest.raises( ValueError ):
-            missing_grid_variables_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                     range( parameters["number_time_steps"] ) )
+            missing_grid_variables_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                         range( parameters["number_time_steps"] ) )
 
     @pytest.mark.parametrize( "create_netcdf_files",
                               [(3, (8, 16, 32), ["u", "v", "w"], "inconsistent_variable_dimensions")],
@@ -1106,8 +1106,8 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when the variables' sizes
         # are not consistent between individual time step files.
         with pytest.raises( ValueError ):
-            inconsistent_variables_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                     range( number_time_steps ) )
+            inconsistent_variables_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                         range( number_time_steps ) )
 
         # verify that grid variables must be both dimension name and dimension
         # shape compatible.  this changes the dimension's name but retains the
@@ -1128,8 +1128,8 @@ class TestSyntheticIWPDataset:
         # verify that a dataset can't be created when the variables' dimension
         # names are not consistent between individual time step files.
         with pytest.raises( ValueError ):
-            inconsistent_variables_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                     range( number_time_steps ) )
+            inconsistent_variables_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                         range( number_time_steps ) )
 
     @pytest.mark.parametrize( "create_netcdf_files",
                               [( 2, (4,  4,  2), ["u", "v", "w"], "normal"),
@@ -1159,9 +1159,9 @@ class TestSyntheticIWPDataset:
 
         # create a normal dataset (i.e. no permutation of indices, default
         # variables) and verify its contents.
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          time_indices,
-                                          xy_slice_indices=xy_slice_indices )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              time_indices,
+                                              xy_slice_indices=xy_slice_indices )
 
         TestSyntheticIWPDataset.validate_all_slices_values(
             dataset,
@@ -1223,9 +1223,9 @@ class TestSyntheticIWPDataset:
             PERMUTATION_CYCLE_LENGTH )
 
         # verify that XY slices can be permuted via the dataset.
-        normal_time_permuted_xy_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                  time_indices,
-                                                                  xy_slice_indices=xy_slice_indices_permuted )
+        normal_time_permuted_xy_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                      time_indices,
+                                                                      xy_slice_indices=xy_slice_indices_permuted )
 
         TestSyntheticIWPDataset.validate_all_slices_values(
             normal_time_permuted_xy_dataset,
@@ -1233,9 +1233,9 @@ class TestSyntheticIWPDataset:
             xy_slice_indices_permuted )
 
         # verify that time steps can be permuted via the dataset.
-        permuted_time_normal_xy_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                  time_indices_permuted,
-                                                                  xy_slice_indices=xy_slice_indices )
+        permuted_time_normal_xy_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                      time_indices_permuted,
+                                                                      xy_slice_indices=xy_slice_indices )
 
         TestSyntheticIWPDataset.validate_all_slices_values(
             permuted_time_normal_xy_dataset,
@@ -1244,9 +1244,9 @@ class TestSyntheticIWPDataset:
 
         # verify that both time steps and XY slices can be permuted via the data
         # set.
-        permuted_time_permuted_xy_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                    time_indices_permuted,
-                                                                    xy_slice_indices=xy_slice_indices_permuted )
+        permuted_time_permuted_xy_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                        time_indices_permuted,
+                                                                        xy_slice_indices=xy_slice_indices_permuted )
 
         TestSyntheticIWPDataset.validate_all_slices_values(
             permuted_time_permuted_xy_dataset,
@@ -1308,9 +1308,9 @@ class TestSyntheticIWPDataset:
             PERMUTATION_CYCLE_LENGTH )
 
         # start easy and verify that no permutations work.
-        normal_time_normal_xy_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                time_indices,
-                                                                xy_slice_indices=xy_slice_indices )
+        normal_time_normal_xy_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                    time_indices,
+                                                                    xy_slice_indices=xy_slice_indices )
 
         TestSyntheticIWPDataset.validate_all_slices_values_backwards(
             normal_time_normal_xy_dataset,
@@ -1318,9 +1318,9 @@ class TestSyntheticIWPDataset:
             xy_slice_indices )
 
         # verify that permuting just the time indices works.
-        normal_time_permuted_xy_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                  time_indices,
-                                                                  xy_slice_indices=xy_slice_indices_permuted )
+        normal_time_permuted_xy_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                      time_indices,
+                                                                      xy_slice_indices=xy_slice_indices_permuted )
 
         TestSyntheticIWPDataset.validate_all_slices_values_backwards(
             normal_time_permuted_xy_dataset,
@@ -1328,9 +1328,9 @@ class TestSyntheticIWPDataset:
             xy_slice_indices_permuted )
 
         # verify that permuting just the slice indices works.
-        permuted_time_normal_xy_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                  time_indices_permuted,
-                                                                  xy_slice_indices=xy_slice_indices )
+        permuted_time_normal_xy_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                      time_indices_permuted,
+                                                                      xy_slice_indices=xy_slice_indices )
 
         TestSyntheticIWPDataset.validate_all_slices_values_backwards(
             permuted_time_normal_xy_dataset,
@@ -1338,9 +1338,9 @@ class TestSyntheticIWPDataset:
             xy_slice_indices )
 
         # verify that permuting the time and slice indices, together, works.
-        permuted_time_permuted_xy_dataset = data_loader.IWPDataset( netcdf_pattern,
-                                                                    time_indices_permuted,
-                                                                    xy_slice_indices=xy_slice_indices_permuted )
+        permuted_time_permuted_xy_dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                        time_indices_permuted,
+                                                                        xy_slice_indices=xy_slice_indices_permuted )
 
         TestSyntheticIWPDataset.validate_all_slices_values_backwards(
             permuted_time_permuted_xy_dataset,
@@ -1374,9 +1374,9 @@ class TestSyntheticIWPDataset:
         # present in the underlying files.
         with pytest.raises( ValueError ):
             # request a single XY slice beyond the last one available.
-            dataset = data_loader.IWPDataset( netcdf_pattern,
-                                              range( parameters["number_time_steps"] ),
-                                              xy_slice_indices=[parameters["grid_size"][2] + 1] )
+            dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                  range( parameters["number_time_steps"] ),
+                                                  xy_slice_indices=[parameters["grid_size"][2] + 1] )
 
     @pytest.mark.parametrize( "create_netcdf_files",
                               [(10, (8, 16, 32), ["u", "v"], "invalid_access_indices")],
@@ -1398,8 +1398,8 @@ class TestSyntheticIWPDataset:
 
         parameters, netcdf_pattern, netcdf_paths = create_netcdf_files
 
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          range( parameters["number_time_steps"] ) )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              range( parameters["number_time_steps"] ) )
 
         # get the shape of this data set.
         number_slices     = len( dataset )
@@ -1442,8 +1442,8 @@ class TestSyntheticIWPDataset:
 
         parameters, netcdf_pattern, netcdf_paths = create_netcdf_files
 
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          range( parameters["number_time_steps"] ) )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              range( parameters["number_time_steps"] ) )
 
         # get the parameters and derived values from them so we can validate
         # what the dataset exposes.
@@ -1520,69 +1520,69 @@ class TestSyntheticIWPDataset:
         xy_slice_indices = range( parameters["grid_size"][2] )
 
         # verify the XY slice indices can be specified as a range.
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          time_indices,
-                                          xy_slice_indices=xy_slice_indices )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              time_indices,
+                                              xy_slice_indices=xy_slice_indices )
 
         # verify the XY slice indices can be specified as a list.
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          time_indices,
-                                          xy_slice_indices=list( xy_slice_indices ) )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              time_indices,
+                                              xy_slice_indices=list( xy_slice_indices ) )
 
         # verify the XY slice indices can be specified as a tuple.
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          time_indices,
-                                          xy_slice_indices=tuple( xy_slice_indices ) )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              time_indices,
+                                              xy_slice_indices=tuple( xy_slice_indices ) )
 
         # verify the XY slice indices can be specified as a scalar integer.
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          time_indices,
-                                          xy_slice_indices=parameters["grid_size"][2] - 1 )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              time_indices,
+                                              xy_slice_indices=parameters["grid_size"][2] - 1 )
 
         # verify that other strange XY slice indices raise an exception.
         with pytest.raises( ValueError ):
-            dataset = data_loader.IWPDataset( netcdf_pattern,
-                                              time_indices,
-                                              xy_slice_indices=list( map( lambda x: float( x ),
-                                                                          xy_slice_indices ) ) )
+            dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                  time_indices,
+                                                  xy_slice_indices=list( map( lambda x: float( x ),
+                                                                              xy_slice_indices ) ) )
 
         with pytest.raises( ValueError ):
-            dataset = data_loader.IWPDataset( netcdf_pattern,
-                                              time_indices,
-                                              xy_slice_indices=0.0 )
+            dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                  time_indices,
+                                                  xy_slice_indices=0.0 )
 
         with pytest.raises( ValueError ):
-            dataset = data_loader.IWPDataset( netcdf_pattern,
-                                              time_indices,
-                                              xy_slice_indices="abc" )
+            dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                  time_indices,
+                                                  xy_slice_indices="abc" )
 
         # verify the time indices can be specified as a range.
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          time_indices )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              time_indices )
 
         # verify the time indices can be specified as a list.
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          list( time_indices ) )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              list( time_indices ) )
 
         # verify the time indices can be specified as a tuple.
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          tuple( time_indices ) )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              tuple( time_indices ) )
 
         # verify the time indices can be specified as a scalar integer.
-        dataset = data_loader.IWPDataset( netcdf_pattern,
-                                          parameters["number_time_steps"] - 1 )
+        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                              parameters["number_time_steps"] - 1 )
 
         # verify that other strange time indices raise an exception.
         with pytest.raises( ValueError ):
-            dataset = data_loader.IWPDataset( netcdf_pattern,
-                                              list( map( lambda x: float( x ),
-                                                         time_indices ) ) )
+            dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                  list( map( lambda x: float( x ),
+                                                             time_indices ) ) )
 
         with pytest.raises( ValueError ):
-            dataset = data_loader.IWPDataset( netcdf_pattern, 0.0 )
+            dataset = iwp.data_loader.IWPDataset( netcdf_pattern, 0.0 )
 
         with pytest.raises( ValueError ):
-            dataset = data_loader.IWPDataset( netcdf_pattern, "abc" )
+            dataset = iwp.data_loader.IWPDataset( netcdf_pattern, "abc" )
 
 
 if __name__ == "__main__":
