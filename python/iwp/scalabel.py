@@ -434,7 +434,10 @@ def set_iwp_labels( scalabel_frames, iwp_labels_path=None ):
 
 def load_scalabel_frames( scalabel_frames_path ):
     """
-    Loads Scalabel frames from a file.
+    Loads Scalabel frames from a file.  Handles both raw sequences of Scalabel frames
+    as well as labels exported from Scalabel.ai's application.
+
+    Raises ValueError if the data read isn't of a known type.
 
     Takes 1 argument:
 
@@ -449,4 +452,13 @@ def load_scalabel_frames( scalabel_frames_path ):
     with open( scalabel_frames_path, "r" ) as scalabel_frames_fp:
         scalabel_frames = json.load( scalabel_frames_fp )
 
-    return scalabel_frames
+    # handle the case where we have exported labels from Scalabel.ai itself vs
+    # a list of frames.
+    if type( scalabel_frames ) == dict:
+        if "frames" in scalabel_frames:
+            return scalabel_frames["frames"]
+    elif type( scalabel_frames ) == list:
+        return scalabel_frames
+
+    raise ValueError( "Unknown structure read from '{:s}'.".format(
+        scalabel_frames_path ) )
