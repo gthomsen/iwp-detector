@@ -1,4 +1,5 @@
 import copy
+import enum
 import json
 import os
 
@@ -17,6 +18,29 @@ import iwp.labels
 #         4. extract IWP labels from Scalabel frames
 #         5. normalize IWP labels to create new canonical labels
 #
+
+# enumeration of labeling strategies for Scalabel playlists:
+#
+#   no_order  - frames have no special ordering and may be presented in any
+#               order.
+#   xy_slices - frames are sorted such that each location within the data volume
+#               is grouped together.  this results in all of one XY slice's data
+#               being temporally ordered before another XY slice is visited.
+#   z_stacks  - frames are sorted such that XY slices within a single time step
+#               are grouped together.  this results in full stacks of XY slices
+#               for a single time step being grouped together.
+#   variables - frames are sorted such that variables from a single XY slice
+#               are grouped together.
+#
+#                 NOTE: this does not appear to be a useful sort order and will
+#                       likely be removed in the future.
+#
+@enum.unique
+class LabelingStrategyType( enum.Enum ):
+    NO_ORDER  = 1
+    XY_SLICES = 2
+    Z_STACKS  = 3
+    VARIABLES = 4
 
 def build_slice_name( experiment_name, variable_name, time_index, xy_slice_index ):
     """
@@ -84,6 +108,60 @@ def slice_name_to_components( slice_name ):
     }
 
     return slice_map
+
+def build_slice_video_name( playlist_strategy, experiment_name, variable_name, time_index, xy_slice_index ):
+    """
+    Builds a video name for a slice based on the experiment variable, and location
+    within the dataset.  The structure of the returned name is governed by the
+    strategy specified which ultimately controls how the slice is sorted within a
+    playlist when loaded into Scalabel.ai.
+
+    The returned names' structures are as follows:
+
+       NO_ORDER  - <experiment>
+       XY_SLICES - <experiment>-<variable>-z=<slice_index>
+       Z_STACKS  - <experiment>-<variable>-Nt=<time_index>
+       VARIABLES - <experiment>-z=<slice_index>-Nt=<time_index>
+
+    Takes 5 arguments:
+
+      playlist_strategy - Enumeration of type iwp.labels.scalabel.LabelingStrategyType
+                          that controls the sort order of a frame containing the
+                          returned video name.  See the description above for the
+                          individual sort strategies.
+      experiment_name   - String specifying the experiment that generated the slice.
+      variable_name     - String specifying the variable associated with the slice.
+      time_index        - Non-negative index specifying the time step associated with
+                          the slice.
+      xy_slice_index    - Non-negative index specifying the XY slice.
+
+    Returns 1 value:
+
+      video_name - String containing the constructed video name.
+
+    """
+
+    # default to the experiment name which makes all slices equal to each other.
+    # this results in playlists retaining their natural ordering.
+    video_name = experiment_name
+
+    if playlist_strategy == LabelingStrategyType.XY_SLICES:
+        video_name = "{:s}-{:s}-z={:03d}".format(
+            experiment_name,
+            variable_name,
+            xy_slice_index )
+    elif playlist_strategy == LabelingStrategyType.Z_STACKS:
+        video_name = "{:s}-{:s}-Nt={:03d}".format(
+            experiment_name,
+            variable_name,
+            time_index )
+    elif playlist_strategy == LabelingStrategyType.VARIABLES:
+        video_name = "{:s}-z={:03d}-Nt={:03d}".format(
+            experiment_name,
+            time_index,
+            xy_slice_index )
+
+    return video_name
 
 def build_slice_path( data_root, data_suffix, experiment_name, variable_name, time_index, xy_slice_index, index_precision=3 ):
     """
@@ -165,8 +243,6 @@ def build_slice_url( url_prefix, slice_path, number_components=0 ):
         url_prefix,
          "/".join( path_components[number_components:] ) )
 
-# XXX: take an optional list that specifies [time, z, variable] to control the
-#      order taken through the frames.
 def build_scalabel_frames( experiment_name,
                            variables_list,
                            time_range,
@@ -175,12 +251,30 @@ def build_scalabel_frames( experiment_name,
                            data_suffix,
                            url_prefix,
                            component_count,
+                           labeling_strategy=LabelingStrategyType.NO_ORDER,
                            check_data_flag=False ):
     """
     Builds a sequence of minimal, Scalabel frames according to the slice metadata provided.
-    Frames are constructed in (Z, time, variable) order with right-most dimensions moving
-    the fastest.  Serializing the generated frames is sufficient for an Items list to start
-    a new Scalabel video labeling project.
+    Serializing the generated frames is sufficient for an Items list to start a new Scalabel.ai
+    video labeling project.
+
+    Frames are constructed in (Z, time, variable) order in the generated structure
+    though are sorted by Scalabel.ai when loaded.  The labeling order within the
+    application is governed by the labeling strategy specified:
+
+      NO_ORDER  - No particular order is specified.  All frames are from the same
+                  "video" and Scalabel.ai sorts by time stamp and frame name.
+      XY_SLICES - Frames are sorted by location within the dataset.  Each XY slice
+                  is from the same "video" which results in each of its time steps
+                  being grouped together.
+      Z_STACKS  - Frames are sorted by time within the dataset.  Each time step is
+                  from the same "video" which results in each of its XY slices being
+                  grouped together (in a stack).
+      VARIABLES - Frames are sorted by time and location within the dataset.  Each
+                  XY slice, per time step, is from the same "video" which results in
+                  each of its variables being grouped together.  There is no guarantee
+                  that adjacent slices, either in XY slice or time step order, are
+                  consecutive.
 
     NOTE: None of the frames generated have labels.  These must be set by hand or with
           set_iwp_labels().
@@ -192,22 +286,24 @@ def build_scalabel_frames( experiment_name,
     Raises FileNotFoundError if a datum associated with a generated frame does not
     exist and the caller requested verification.
 
-    Takes 9 arguments:
+    Takes 10 arguments:
 
-      experiment_name - Name of the experiment that generated the underlying frame
-                        data.
-      variables_list  - Sequence of variables to build frames for.
-      time_range      - Sequence of time step indices to build frames for.
-      xy_slice_range  - Sequence of XY slice indices to build frames for.
-      data_root       - Path root to the slice's on-disk storage.
-      data_suffix     - Path suffix to the slice's on-disk storage.
-      url_prefix      - URL prefix to use for each frame's URL.
-      component_count - Number of components to strip off of the computed slice path
-                        when building the frame's URL.
-      check_data_flag - Optional boolean specifying whether individual frames datum's
-                        will be checked for existence.  If True and the underlying
-                        datum does not exist, FileNotFoundError is raised.  If
-                        omitted, defaults to False.
+      experiment_name   - Name of the experiment that generated the underlying frame
+                          data.
+      variables_list    - Sequence of variables to build frames for.
+      time_range        - Sequence of time step indices to build frames for.
+      xy_slice_range    - Sequence of XY slice indices to build frames for.
+      data_root         - Path root to the slice's on-disk storage.
+      data_suffix       - Path suffix to the slice's on-disk storage.
+      url_prefix        - URL prefix to use for each frame's URL.
+      component_count   - Number of components to strip off of the computed slice
+                          path when building the frame's URL.
+      labeling_strategy - Optional enumeration of type iwp.labels.scalabel.LabelingStrategyType
+                          that controls the sort order generated frames.
+      check_data_flag   - Optional boolean specifying whether individual frames datum's
+                          will be checked for existence.  If True and the underlying
+                          datum does not exist, FileNotFoundError is raised.  If
+                          omitted, defaults to False.
 
     Returns 1 value:
 
@@ -221,14 +317,24 @@ def build_scalabel_frames( experiment_name,
     # walk through each XY slice one at a time, visiting each time step in
     # sequence before moving to the next slice.  each variable is visited in
     # sequence within each time step.
+    #
+    # NOTE: this order doesn't influence Scalabel.ai's tool at all as it sorts
+    #       frames by video name and timestamp before showing them to labelers.
+    #
     for xy_slice_index in xy_slice_range:
-
-        # we're abusing Scalabel's video labeling capabilities.  the underlying
-        # "video" is our experiment.
-        video_name = experiment_name
-
         for time_index in time_range:
             for variable_name in variables_list:
+                # construct the video's name.  this influences the order in
+                # which frames are presented to labelers.  timestamps are used
+                # as a secondary sort key when frames come from the same video.
+                video_name = build_slice_video_name( labeling_strategy,
+                                                     experiment_name,
+                                                     variable_name,
+                                                     time_index,
+                                                     xy_slice_index )
+
+                # construct the slice's "name".  this is the frame name within
+                # the "video".
                 slice_name = build_slice_name( experiment_name,
                                                variable_name,
                                                time_index,

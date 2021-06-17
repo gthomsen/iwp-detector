@@ -21,7 +21,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
     """
 
     usage_str = \
-"""{program_name:s} [-f] [-h] [-l <labels_path>] <playlist_path> <experiment> <variable>[,<variable>[...]] <time_start>:<time_stop> <z_start>:<z_stop> <data_root> <url_prefix> <component_count>
+"""{program_name:s} [-f] [-h] [-l <labels_path>] [-L <labeling_strategy>] <playlist_path> <experiment> <variable>[,<variable>[...]] <time_start>:<time_stop> <z_start>:<z_stop> <data_root> <url_prefix> <component_count>
 
     Creates a JSON playlist suitable for importing into a new Scalabel.ai labeling project
     at <playlist_path>.  The playlist generated contains a sequence of "video frames"
@@ -29,11 +29,19 @@ def print_usage( program_name, file_handle=sys.stdout ):
     into the playlist to support label refinement and review, rather than initial label
     creation.
 
-    The sequence of XY slices generated iterates over the time range specified by
-    <time_start>:<time_stop>, over the XY slice index specified by <z_start>:<z_stop>,
-    and over the variables specified by <variable>[,<variable>[...], with variables
-    being the fastest dimension.  Each variable specified is part of the same "video
-    frame" which allows easier labeling via Scalabel's label interpolation capabilities.
+    The sequence of XY slices generated depends on the <labeling_strategy> requested.
+    Depending on the strategy specified, each frame's video name is constructed such
+    that Scalabel.ai's video labeling project partitions a playlist into logical
+    chunks that are each reasonably ordered (e.g. all time steps for fixed XY slice
+    or all XY slices for a fixed time step).  Supported strategies are the following:
+
+      {no_order:12s}- No order is specified.
+      {xy_slices:12s}- Frames are sorted by location within the dataset.  Labelers see
+                    all time steps for a specific XY slice.
+      {z_stacks:12s}- Frames are sorted by time within the dataset.  Labelers see
+                    all XY slices for a specific time step.
+      {variables:12s}- Frames are sorted by time and location within the dataset.  Labelers
+                    see each of the variables for a XY slice at a specific time step.
 
     Playlist frames have URLs comprised of <url_prefix> prepended to supplied <data_root>
     with <component_count>-many leading path components removed.  This allows replacement
@@ -67,8 +75,15 @@ def print_usage( program_name, file_handle=sys.stdout ):
         -h                        Print this help message and exit.
         -l <labels_path>          Path to serialized IWP labels to incorporate in the created
                                   playlist.
+        -L <labeling_strategy>    Strategy for sequencing the generated playlist.  Must
+                                  be one of: {no_order:s}, {xy_slices:s}, {z_stacks:s},
+                                  {variables:s}.  See the description above for details.
 """.format(
     program_name=program_name,
+    no_order="'{:s}'".format( iwp.scalabel.LabelingStrategyType.NO_ORDER.name.lower() ),
+    xy_slices="'{:s}'".format( iwp.scalabel.LabelingStrategyType.XY_SLICES.name.lower() ),
+    z_stacks="'{:s}'".format( iwp.scalabel.LabelingStrategyType.Z_STACKS.name.lower() ),
+    variables="'{:s}'".format( iwp.scalabel.LabelingStrategyType.VARIABLES.name.lower() )
 )
 
     print( usage_str, file=file_handle )
@@ -150,17 +165,27 @@ def parse_command_line( argv ):
 
     # abort if we are creating a Scalabel frame that references non-existent
     # data.
-    options.force_flag      = False
+    options.force_flag = False
 
     # create Scalabel frames without labels.
     options.iwp_labels_path = None
 
+    # create playlists without any particular ordering of the frames by default.
+    options.labeling_strategy = iwp.scalabel.LabelingStrategyType.NO_ORDER
+
     # parse our command line options.
     try:
-        option_flags, positional_arguments = getopt.getopt( argv[1:], "fhl:" )
+        option_flags, positional_arguments = getopt.getopt( argv[1:], "fhl:L:" )
     except getopt.GetoptError as error:
         raise ValueError( "Error processing option: {:s}\n".format( str( error ) ),
                           file=sys.stderr )
+
+    valid_labeling_strategies = {
+        iwp.scalabel.LabelingStrategyType.NO_ORDER.name:  iwp.scalabel.LabelingStrategyType.NO_ORDER,
+        iwp.scalabel.LabelingStrategyType.XY_SLICES.name: iwp.scalabel.LabelingStrategyType.XY_SLICES,
+        iwp.scalabel.LabelingStrategyType.Z_STACKS.name:  iwp.scalabel.LabelingStrategyType.Z_STACKS,
+        iwp.scalabel.LabelingStrategyType.VARIABLES.name: iwp.scalabel.LabelingStrategyType.VARIABLES
+        }
 
     # handle any valid options that were presented.
     for option, option_value in option_flags:
@@ -171,6 +196,13 @@ def parse_command_line( argv ):
             return (None, None)
         elif option == "-l":
             options.iwp_labels_path = option_value
+        elif option == "-L":
+            if option_value.upper() in valid_labeling_strategies:
+                options.labeling_strategy = valid_labeling_strategies[option_value.upper()]
+            else:
+                raise ValueError( "Unknown labeling strategy '{:s}'.  Must be one of: {:s}.".format(
+                    option_value,
+                    ", ".join( map( lambda x: x.name.lower() ) ) ) )
 
     # ensure we have the correct number of arguments.
     if len( positional_arguments ) != NUMBER_ARGUMENTS:
@@ -248,6 +280,7 @@ def main( argv ):
                                                               ".png",
                                                               arguments.url_prefix,
                                                               arguments.component_count,
+                                                              labeling_strategy=options.labeling_strategy,
                                                               check_data_flag=options.force_flag )
     except FileNotFoundError as e:
         print( "Could not build Scalabel playlist - {:s}".format(
