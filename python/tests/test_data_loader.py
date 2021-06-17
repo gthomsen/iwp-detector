@@ -1454,6 +1454,9 @@ class TestSyntheticIWPDataset:
         number_variables  = len( variable_names )
         number_slices     = (number_time_steps * number_xy_slices)
 
+        time_step_indices = list( range( number_time_steps ) )
+        xy_slice_indices  = list( range( number_xy_slices ) )
+
         # verify that the dataset reports the correct, total number of slices.
         assert len( dataset ) == number_slices, \
             "{:s} has an invalid number of slices.  Expected {:d} but got {:d}.".format(
@@ -1468,12 +1471,24 @@ class TestSyntheticIWPDataset:
                 number_time_steps,
                 dataset.number_time_steps() )
 
+        assert dataset.time_step_indices() == time_step_indices, \
+            "{:s} has an invalid set of time step indices.  Expected {} but got {}.".format(
+                netcdf_pattern,
+                time_step_indices,
+                dataset.time_step_indices() )
+
         # verify that the dataset reports the correct number of XY slices.
         assert dataset.number_xy_slices() == number_xy_slices, \
             "{:s} has an invalid number of XY slices.  Expected {:d} but got {:d}.".format(
                 netcdf_pattern,
                 number_xy_slices,
                 dataset.number_xy_slices() )
+
+        assert dataset.xy_slice_indices() == xy_slice_indices, \
+            "{:s} has an invalid set of XY slice indices.  Expected {} but got {}.".format(
+                netcdf_pattern,
+                xy_slice_indices,
+                dataset.xy_slice_indices() )
 
         # verify that the dataset reports the correct number of variables.
         assert dataset.number_variables() == number_variables, \

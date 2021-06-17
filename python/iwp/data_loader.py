@@ -351,6 +351,34 @@ class IWPDataset( torch.utils.data.dataset.Dataset ):
 
         return copy.copy( self._variables )
 
+    def time_step_indices( self ):
+        """
+        Returns a list of time step indices in the dataset.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          time_step_indices - List of time step indices.
+
+        """
+
+        return copy.copy( self._time_indices )
+
+    def xy_slice_indices( self ):
+        """
+        Returns a list of XY slice indices in the dataset.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          xy_slice_indices - List of XY slice indices.
+
+        """
+
+        return copy.copy( self._xy_slice_indices )
+
     def get_xy_slice( self, time_index, xy_slice_index ):
         """
         Extracts an XY slice from the underlying dataset specified by the time and XY slice
