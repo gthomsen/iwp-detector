@@ -129,3 +129,27 @@ def get_xarray_subset( dataset, variable_name, time_step_indices, xy_slice_indic
                   .isel( z=xy_slice_indices ))
 
     return data_array
+
+def lookup_module_function( module_reference, function_name ):
+    """
+    Acquires a function reference from a module given an function name.
+
+    Takes 2 arguments:
+
+      module_reference - Module whose interface is searched for function_name.
+      function_name    - String specifying the function whose handle is sought.
+
+    Returns 1 value:
+
+      function_reference - Reference to the requested function.  None if function_name
+                           is not part of module_reference's interface or if there was
+                           an error acquiring the reference.
+    """
+
+    # get a reference to the function requested.  return None if it isn't part
+    # of the module's interface.
+    function_reference = getattr( module_reference,
+                                  function_name,
+                                  None )
+
+    return function_reference

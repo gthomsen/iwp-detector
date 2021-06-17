@@ -244,43 +244,6 @@ def parse_command_line( argv ):
 
     return options, arguments
 
-def lookup_module_function( module_reference, function_name ):
-    """
-    Acquires a function reference from a module given an function name.
-
-    Takes 2 arguments:
-
-      module_reference - Module whose interface is searched for function_name.
-      function_name    - String specifying the function whose handle is sought.
-
-    Returns 1 value:
-
-      function_reference - Reference to the requested function.  None if function_name
-                           is not part of module_reference's interface or if there was
-                           an error acquiring the reference.
-    """
-
-    function_reference = None
-
-    try:
-        # get a reference to the function requested, but only if it is part of
-        # the module's interface.
-        #
-        # NOTE: hopefully this is safe...
-        #
-        if function_name in dir( module_reference ):
-            function_reference_string = "{:s}.{:s}".format(
-                module_reference.__name__,
-                function_name )
-
-            function_reference = eval( function_reference_string )
-    finally:
-        #
-        # NOTE: we don't care if an exception was thrown.  we either got
-        #       a reference or not - let the caller handle each case.
-        #
-        return function_reference
-
 def main( argv ):
     """
     Parses the supplied command line arguments and renders IWP data as on-disk
@@ -344,8 +307,8 @@ def main( argv ):
                         variable_name ) )
 
     # acquire a quantization table.
-    quantization_table_builder = lookup_module_function( iwp.quantization,
-                                                         options.quantization_table_name )
+    quantization_table_builder = iwp.utilities.lookup_module_function( iwp.quantization,
+                                                                       options.quantization_table_name )
 
     if quantization_table_builder is None:
         print( "Invalid quantization table builder specified ('{:s}').".format(
@@ -354,8 +317,8 @@ def main( argv ):
         return 1
 
     # acquire a color map.
-    colormap = lookup_module_function( matplotlib.cm,
-                                       options.colormap_name )
+    colormap = iwp.utilities.lookup_module_function( matplotlib.cm,
+                                                     options.colormap_name )
 
     if colormap is None:
         print( "Invalid colormap specified ('{:s}').".format(
