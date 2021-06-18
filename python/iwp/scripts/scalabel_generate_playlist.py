@@ -177,8 +177,7 @@ def parse_command_line( argv ):
     try:
         option_flags, positional_arguments = getopt.getopt( argv[1:], "fhl:L:" )
     except getopt.GetoptError as error:
-        raise ValueError( "Error processing option: {:s}\n".format( str( error ) ),
-                          file=sys.stderr )
+        raise ValueError( "Error processing option: {:s}\n".format( str( error ) ) )
 
     valid_labeling_strategies = {
         iwp.scalabel.LabelingStrategyType.NO_ORDER.name:  iwp.scalabel.LabelingStrategyType.NO_ORDER,

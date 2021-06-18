@@ -193,8 +193,7 @@ def parse_command_line( argv ):
     try:
         option_flags, positional_arguments = getopt.getopt( argv[1:], "c:hLq:S:s:Tt:v" )
     except getopt.GetoptError as error:
-        raise ValueError( "Error processing option: {:s}\n".format( str( error ) ),
-                          file=sys.stderr )
+        raise ValueError( "Error processing option: {:s}\n".format( str( error ) ) )
 
     # handle any valid options that were presented.
     for option, option_value in option_flags:
