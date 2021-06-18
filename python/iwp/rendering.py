@@ -1,3 +1,6 @@
+import io
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import os
 from PIL import Image, ImageDraw
@@ -87,6 +90,75 @@ def array_to_image( array, quantization_table, color_map, title_text="" ):
                    fill=(255, 255, 255, 175) )
 
     return image
+
+def color_map_to_image( color_map, color_limits, orientation="vertical", figsize=None ):
+    """
+    Converts a colormap to a colorbar and renders it into a PIL Image.
+
+    Takes 4 arguments:
+
+      color_map    - Matplotlib color map to render into a colorbar.
+      color_limits - Tuple of minimum and maximum values to set the extremes of the
+                     rendered colorbar.
+      orientation  - Optional string specifying the orientation of the colorbar.
+                     Must be either "horizontal" or "vertical".  If omitted,
+                     defaults to "vertical" for a vertically oriented colorbar.
+      figsize      - Optional tuple specifying the size, width and height in inches,
+                     of the colorbar.  If omitted, a default size is chosen.
+
+                     NOTE: No sanity checks are performed against the orientation
+                           and the color_limits to ensure that the rendered colorbar
+                           will fit within the requested size.
+
+    Returns 1 value:
+
+      image_buffer - PIL Image of the rendered colorbar.
+
+    """
+
+    # we use Matplotlib to render a colorbar from our colormap and then
+    # serialize it into a buffer that PIL can turn into an exportable image.
+
+    # pick a reasonable default figure size based on the orientation.
+    if figsize is None:
+        if orientation == "vertical":
+            figsize = (1.5, 5)
+        elif orientation == "horizontal":
+            figsize = (5, 1.5)
+        else:
+            raise ValueError( "Unknown colorbar orientation ({:s}).  "
+                              "Cannot default figsize.".format(
+                                  orientation ) )
+
+    # build a figure of the appropriate size.  the single axes will contain
+    # the colorbar.
+    fig_h, ax_h = plt.subplots( 1, 1, figsize=figsize )
+
+    # create a colorbar spanning our color limits using the supplied colormap.
+    normalizer = mpl.colors.Normalize( vmin=color_limits[0],
+                                       vmax=color_limits[1] )
+    fig_h.colorbar( mpl.cm.ScalarMappable( norm=normalizer,
+                                           cmap=color_map ),
+                    cax=ax_h,
+                    orientation=orientation )
+
+    # attempt to remove excess space in the figure.
+    fig_h.tight_layout()
+
+    # serialize the figure to a buffer.
+    #
+    # NOTE: we use PNG so that we have a lossless round trip from Matplotlib
+    #       figure to PIL image.
+    #
+    colorbar_buffer = io.BytesIO()
+    fig_h.savefig( colorbar_buffer, format="png" )
+    plt.close( fig=fig_h )
+    colorbar_buffer.seek( 0 )
+
+    # create a PIL image from the raw bytes.
+    colorbar_image = Image.open( colorbar_buffer )
+
+    return colorbar_image
 
 def da_write_single_xy_slice_image( da, output_path, quantization_table, color_map, title_text="", verbose_flag=False ):
     """
