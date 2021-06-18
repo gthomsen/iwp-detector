@@ -10,6 +10,7 @@ The following packages are required:
 * NetCDF4
 * Dask
 * xarray
+* python-pptx
 
 The following versions have been tested and are explicitly set in the
 `requirements.txt` file referenced below:
