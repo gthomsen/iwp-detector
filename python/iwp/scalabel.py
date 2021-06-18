@@ -103,8 +103,8 @@ def slice_name_to_components( slice_name ):
     slice_map = {
         "experiment":      "-".join( slice_components[:-3] ),
         "variable":        slice_components[-3],
-        "z_index":         slice_components[-2].split( "=" )[1],
-        "time_step_index": slice_components[-1].split( "=" )[1]
+        "z_index":         int( slice_components[-2].split( "=" )[1] ),
+        "time_step_index": int( slice_components[-1].split( "=" )[1] )
     }
 
     return slice_map

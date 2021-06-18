@@ -147,6 +147,12 @@ def load_iwp_labels( iwp_labels_path ):
     with open( iwp_labels_path, "r" ) as iwp_labels_fp:
         iwp_labels = json.load( iwp_labels_fp )
 
+    # ensure that the slice indices are integral regardless of how they were
+    # serialized.
+    for iwp_label in iwp_labels:
+        iwp_label["time_step_index"] = int( iwp_label["time_step_index"] )
+        iwp_label["z_index"]         = int( iwp_label["z_index"] )
+
     return iwp_labels
 
 def union_iwp_label( iwp_label_a, iwp_label_b ):
