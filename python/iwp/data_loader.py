@@ -219,8 +219,8 @@ class IWPDataset( torch.utils.data.dataset.Dataset ):
                              *self._netcdf_files[0][self._variables[0]].shape[1:])
 
         # get the underlying dimensions (x, y, z) from the netCDF files.
-        self.shape = (self._netcdf_files[0]["x"].shape[0],
-                      self._netcdf_files[0]["y"].shape[0],
+        self.shape = (self._netcdf_files[0].dimensions["x"].size,
+                      self._netcdf_files[0].dimensions["y"].size,
                       self._number_xy_slices)
 
     def __del__( self ):
@@ -432,10 +432,10 @@ class IWPDataset( torch.utils.data.dataset.Dataset ):
         time_index_index = self._time_indices.index( time_index )
 
         # ensure the requested XY slice is within the available grid.
-        if xy_slice_index >= self._netcdf_files[time_index_index]["z"].shape[0]:
+        if xy_slice_index >= self._netcdf_files[time_index_index].dimensions["z"].size:
             raise IndexError( "Requested XY slice (Z index #{:d}, though only {:d} slices present.".format(
                 xy_slice_index,
-                self._netcdf_files[time_index_index]["z"].shape[0] ) )
+                self._netcdf_files[time_index_index].dimensions["z"].size ) )
 
         # create an empty buffer big enough for each of the variables' XY slice
         # stacked together.
