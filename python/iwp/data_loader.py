@@ -289,6 +289,16 @@ class IWPDataset( torch.utils.data.dataset.Dataset ):
         time_index     = index // self._number_xy_slices
         xy_slice_index = index %  self._number_xy_slices
 
+        # give a more helpful exception when we've indexed out of bounds.
+        #
+        # NOTE: we only check the time index as the XY slice index is guaranteed
+        #       to be bounded by its construction.
+        #
+        if time_index >= self._number_time_steps:
+            raise IndexError( "Invalid index ({:d}).  Must be in [0, {:d}].".format(
+                index,
+                self._number_time_steps * self._number_xy_slices ) )
+
         # apply the dataset's permutations the constitute indices so we walk
         # through the permutations rather than the native ordering.
         return self.get_xy_slice( self._time_indices[time_index],
@@ -417,15 +427,17 @@ class IWPDataset( torch.utils.data.dataset.Dataset ):
             # xy_slice_index = xy_slice_index % self._number_xy_slices
             xy_slice_index = self._xy_slice_indices[xy_slice_index % self._number_xy_slices]
 
-        # ensure the requested time step makes sense for the collection of files
-        # we have open.
+        # ensure the requested indices, both time and XY, makes sense for the
+        # collection of files we have open.  this is required to support opening
+        # datasets with non-contiguous subsets in time and/or Z.
         if time_index not in self._time_indices:
             raise IndexError( "Requested time step index {:d}, though have {} time steps available.".format(
                 time_index,
                 self._time_indices ) )
-
-        # XXX: do we need to check that the requested index is in the indices
-        #      specified?
+        elif xy_slice_index not in self._xy_slice_indices:
+            raise IndexError( "Requested XY slice index {:d}, though have {} XY slice indices available.".format(
+                xy_slice_index,
+                self._xy_slice_indices ) )
 
         # find the position of the target time step so we can access its
         # corresponding netCDF4 file.

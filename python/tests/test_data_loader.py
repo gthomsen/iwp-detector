@@ -1379,7 +1379,8 @@ class TestSyntheticIWPDataset:
                                                   xy_slice_indices=[parameters["grid_size"][2] + 1] )
 
     @pytest.mark.parametrize( "create_netcdf_files",
-                              [(10, (8, 16, 32), ["u", "v"], "invalid_access_indices")],
+                              [(12, (8, 16, 10), ["u", "v"], "invalid_access_indices"),
+                               (20, (8, 16, 20), ["u", "v"], "invalid_access_indices")],
                               indirect=True )
     def test_invalid_access_indices( self, create_netcdf_files ):
         """
@@ -1398,27 +1399,118 @@ class TestSyntheticIWPDataset:
 
         parameters, netcdf_pattern, netcdf_paths = create_netcdf_files
 
-        dataset = iwp.data_loader.IWPDataset( netcdf_pattern,
-                                              range( parameters["number_time_steps"] ) )
+        # singleton dimensions to pick out of the test datasets.  these must be
+        # non-zero so we 1) avoid getting lucky because of an easy edge case and
+        # 2) so we can ensure there is an invalid index before each of these.
+        SINGLETON_INDEX_TIME = 3
+        SINGLETON_INDEX_XY   = 5
+
+        number_time_steps = parameters["number_time_steps"]
+        number_xy_slices  = parameters["grid_size"][2]
+
+        # make sure that the underlying datasets are large enough to accommodate
+        # the indices used to test singleton subsets.
+        assert number_time_steps > SINGLETON_INDEX_TIME, \
+            "{:s} needs at least {:d} time steps to test invalid indices, but only has {:d}.".format(
+                netcdf_pattern,
+                SINGLETON_INDEX_TIME + 1,
+                number_time_steps )
+
+        assert number_xy_slices > SINGLETON_INDEX_XY, \
+            "{:s} needs at least {:d} XY slices to test invalid indices, but only has {:d}.".format(
+                netcdf_pattern,
+                SINGLETON_INDEX_XY + 1,
+                number_xy_slices )
+
+        # ensure the indices are non-zero so we can attempt to access the index
+        # before them.
+        assert SINGLETON_INDEX_TIME > 0, \
+            "Singleton access verification needs a non-zero time step index."
+
+        assert SINGLETON_INDEX_XY > 0, \
+            "Singleton access verification needs a non-zero XY slice index."
+
+        # create datasets for each of the combinations of time steps and XY
+        # slices so as to ensure that we test datasets with singleton axes
+        # (e.g. one XY slice for a sequence of time steps or a sequence of
+        # XY slices for a single time step).
+        dataset_all_time_all_xy    = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                 range( parameters["number_time_steps"] ) )
+        dataset_all_time_single_xy = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                 range( parameters["number_time_steps"] ),
+                                                                 xy_slice_indices=[SINGLETON_INDEX_XY] )
+        dataset_single_time_all_xy = iwp.data_loader.IWPDataset( netcdf_pattern,
+                                                                 [SINGLETON_INDEX_TIME] )
+
+        datasets = [dataset_all_time_all_xy,
+                    dataset_all_time_single_xy,
+                    dataset_single_time_all_xy]
+
+        # test accessing beyond the logical bounds of the underlying dataset.
+        for dataset in datasets:
+
+            # get the shape of this data set.
+            number_slices     = len( dataset )
+            number_time_steps = dataset.number_time_steps()
+            number_xy_slices  = dataset.number_xy_slices()
+
+            # verify that indexing beyond the length of the dataset does not
+            # work.  all datasets should fail the same.
+            with pytest.raises( IndexError ):
+                xy_slice = dataset[number_slices]
+
+            # verify that indexing beyond the dataset's volume using the direct
+            # method does not work.
+            #
+            #       1. all time, all xy - shouldn't wrap into the 2nd XY slice
+            #       2. all time, one xy - exceeds the dataset length, same as
+            #                             above
+            #       3. one time, all xy - shouldn't wrap into a later XY slice
+            #
+            with pytest.raises( IndexError ):
+                xy_slice = dataset.get_xy_slice( number_time_steps,
+                                                 0 )
+
+            #
+            #       1. all time, all xy - shouldn't wrap into the 2nd time slice
+            #       2. all time, one xy - shouldn't wrap into a later time slice
+            #       3. one time, all xy - exceeds the dataset length, same as
+            #                             above
+            #
+            with pytest.raises( IndexError ):
+                xy_slice = dataset.get_xy_slice( 0,
+                                                 number_xy_slices )
+
+        datasets = [dataset_all_time_single_xy,
+                    dataset_single_time_all_xy]
+
+        # verify accessing "valid" indices for full datasets does not work for
+        # datasets with singleton dimensions.
 
         # get the shape of this data set.
-        number_slices     = len( dataset )
-        number_time_steps = dataset.number_time_steps()
-        number_xy_slices  = dataset.number_xy_slices()
+        number_time_steps = dataset_all_time_single_xy.number_time_steps()
 
-        # verify that indexing beyond the length of the dataset does not work.
+        # verify that accessing an XY slice index other than the requested
+        # singleton fails.
         with pytest.raises( IndexError ):
-            xy_slice = dataset[number_slices]
+            xy_slice = dataset_all_time_single_xy.get_xy_slice( 0,
+                                                                SINGLETON_INDEX_XY - 1 )
+        with pytest.raises( IndexError ):
+            xy_slice = dataset_all_time_single_xy.get_xy_slice( number_time_steps - 1,
+                                                                SINGLETON_INDEX_XY - 1 )
 
-        # verify that indexing beyond the dataset's volume using the direct
-        # method does not work.
-        with pytest.raises( IndexError ):
-            xy_slice = dataset.get_xy_slice( number_time_steps,
-                                             0 )
+        # get the shape of this data set.
+        number_xy_slices = dataset_single_time_all_xy.number_xy_slices()
 
+        # verify that accessing a time step index other than the requested
+        # singleton fails.
         with pytest.raises( IndexError ):
-            xy_slice = dataset.get_xy_slice( 0,
-                                             number_xy_slices )
+            xy_slice = dataset_single_time_all_xy.get_xy_slice( SINGLETON_INDEX_TIME - 1,
+                                                                0 )
+        with pytest.raises( IndexError ):
+            xy_slice = dataset_single_time_all_xy.get_xy_slice( SINGLETON_INDEX_TIME - 1,
+                                                                number_xy_slices - 1 )
+
 
     @pytest.mark.parametrize( "create_netcdf_files",
                               [(3,  ( 8, 16, 32),  ["u", "v"], "interface_getters"),
