@@ -420,11 +420,9 @@ class IWPDataset( torch.utils.data.dataset.Dataset ):
         #       be accommodated if this breaks something downstream.
         #
         if time_index < 0:
-            # time_index % self._number_time_steps
             time_index = self._time_indices[time_index % self._number_time_steps]
 
         if xy_slice_index < 0:
-            # xy_slice_index = xy_slice_index % self._number_xy_slices
             xy_slice_index = self._xy_slice_indices[xy_slice_index % self._number_xy_slices]
 
         # ensure the requested indices, both time and XY, makes sense for the
