@@ -22,8 +22,9 @@ The following versions have been tested and are explicitly set in the
 
 # Installation
 
-Install the required packages into the current environment:
+Create a new Conda environment:
 
 ```shell
-$ conda install --file requirements.txt --channel pytorch --channel nvidia
+# change the environment name 'iwp' as needed.
+$ conda env create --file python/environment.yml --prefix ${CONDA_ENV}/envs/iwp
 ```
