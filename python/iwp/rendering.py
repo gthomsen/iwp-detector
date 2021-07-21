@@ -47,19 +47,26 @@ def array_to_pixels( array, quantization_table, color_map, scaler=1 ):
 
     return data_pixels
 
-def array_to_image( array, quantization_table, color_map, title_text="" ):
+def array_to_image( array, quantization_table, color_map, indexing_type="ij", title_text="" ):
     """
     Converts a NumPy array to a PIL Image, and optionally burns in a title to
     the top of the image.  The supplied array is quantized and colorized prior
     to conversion to a PIL Image.
 
-    Takes 4 arguments:
+    Raises ValueError if the requested indexing method is unknown.
+
+    Takes 5 arguments:
 
       array              - NumPy array of data to convert to pixels.  The data type
                            must be compatible with NumPy's digitize() function.
       quantization_table - Quantization table to apply to array.  Must be compatible
                            with NumPy's digitize() function.
       color_map          - Matplotlib color map to apply.
+      indexing_type      - Optional string specifying array's indexing method.  Must
+                           be either "xy" (origin in top left) or "ij" (origin in
+                           bottom left).  See numpy.meshgrid() for a detailed
+                           description of indexing types.  If omitted, defaults to
+                           "ij" to match IWP visualization conventions.
       title_text         - Optional title string to burn into the generated image.
                            If omitted, the image is created without alteration.
 
@@ -79,8 +86,16 @@ def array_to_image( array, quantization_table, color_map, title_text="" ):
                               quantization_table,
                               color_map )
 
-    # render the image into a 4-byte per pixel image.
-    image = Image.fromarray( pixels, "RGBA" )
+    # render the image into a 4-byte per pixel image.  ensure that the origin
+    # is placed correctly.
+    if indexing_type == "xy":
+        image = Image.fromarray( pixels, "RGBA" )
+    elif indexing_type == "ij":
+        image = Image.fromarray( np.flipud( pixels ), "RGBA" )
+    else:
+        raise ValueError( "Unknown indexing type requested ('{:s}').  "
+                          "Must be either 'xy' or 'ij'.".format(
+            indexing_type ) )
 
     # burn in a title if requested.
     if len( title_text ) > 0:
@@ -192,7 +207,7 @@ def da_write_single_xy_slice_image( da, output_path, quantization_table, color_m
     image = array_to_image( da.values.astype( np.float32 ),
                             quantization_table,
                             color_map,
-                            title_text )
+                            title_text=title_text )
 
     if verbose_flag:
         print( "Writing {:s}".format( output_path ) )
