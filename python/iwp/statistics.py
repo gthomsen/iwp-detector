@@ -1,39 +1,47 @@
 import json
 
+import xarray
+
 # XXX: create a class to wrap statistics.  methods/attributes for each of the
 #      the descriptive variables.  method to load and save stats?
 
-def compute_statistics( dataset ):
+def compute_statistics( data ):
     """
-    Computes summary statistics of a dataset.  Generates the minimum, maximum, and standard
-    deviation of the entire dataset provided.
+    Computes summary statistics.  Generates the minimum, maximum, and standard
+    deviation for the data provided.  Currently handles Array-like data with special
+    support for xarray Dataset's and DataArrays.
 
     Takes 1 arguments:
 
-      dataset - xarray Dataset or DataArray to compute statistics over.
+      data - Array-like object to compute statistics over.
 
     Returns 3 values:
 
-      minimum - Minimum value of dataset.
-      maximum - Maximum value of dataset.
-      stddev  - Standard deviation of dataset.
+      minimum - Minimum value of data.
+      maximum - Maximum value of data.
+      stddev  - Standard deviation of data.
 
     """
 
     # compute the minimum, maximum, and standard deviation.
-    #
-    # NOTE: this reduces over all grid variables as well as time steps.  caller
-    #       is responsible for providing the correct dataset.
-    #
-    task_min = dataset.min()
-    task_max = dataset.max()
-    task_std = dataset.std()
+    task_min = data.min()
+    task_max = data.max()
+    task_std = data.std()
 
-    (variable_min,
-     variable_max,
-     variable_std) = (task_min.compute().values,
-                      task_max.compute().values,
-                      task_std.compute().values)
+    if isinstance( data, (xarray.Dataset, xarray.DataArray) ):
+        #
+        # NOTE: this reduces over all grid variables as well as time steps.
+        #       caller is responsible for providing the correct data.
+        #
+        (variable_min,
+         variable_max,
+         variable_std) = (task_min.compute().values,
+                          task_max.compute().values,
+                          task_std.compute().values)
+    else:
+        (variable_min,
+         variable_max,
+         variable_std) = (task_min, task_max, task_std)
 
     return (variable_min, variable_max, variable_std)
 
