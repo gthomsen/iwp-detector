@@ -119,3 +119,35 @@ def build_outliers_quantization_table( number_entries, minimum, maximum, standar
 
 
     return quantization_table
+
+def build_linear_quantization_table( number_entries, minimum, maximum, standard_deviation ):
+    """
+    Builds a quantization table, suitable for use with NumPy's digitize(), that uniformly
+    maps data between a minimum and maximum.
+
+    The quantization table generated looks like so:
+
+                                       number_entries
+       [                                                                         ]
+    minimum                                                                   maximum
+
+    Takes 4 arguments:
+
+      number_entries     - Number of entries in quantization_table.
+      minimum            - Minimum value of the data to quantize.
+      maximum            - Maximum value of the data to quantize.
+      standard_deviation - Dummy parameter.  It is required to maintain compatibility with
+                           the module's quantization table builder interface.
+
+    Returns 1 value:
+
+      quantization_table - NumPy array, of type float32, containing the quantization table.
+
+    """
+
+    quantization_table = np.linspace( minimum,
+                                      maximum,
+                                      number_entries,
+                                      dtype=np.float32 )
+
+    return quantization_table
