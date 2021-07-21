@@ -254,7 +254,13 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
     if sum( da.shape ) == 0:
         return da
 
-    time_step_index = da.Cycle.values[0] - 1
+    # pull this time step's value.
+    #
+    # NOTE: this is not a time step index, but rather the actual underlying
+    #       value (i.e. Nt or buoyancy time).  correcting the conflation
+    #       between indices and values will be dealt with at a later date.
+    #
+    time_step_value = da.Cycle.values[0]
 
     # create 8-bit quantization tables since we're generating images.
     number_table_entries = 256
@@ -278,13 +284,13 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
             experiment_name,
             da.name,
             xy_slice_indices[z_index],
-            time_step_index )
+            time_step_value )
 
         # build a title to burn into the slice so it is recognizable without
         # additional metadata.
         title_text = ""
         if title_flag:
-            title_text = "Nt={:03d}, z={:03d}, {:s}".format( time_step_index,
+            title_text = "Nt={:03d}, z={:03d}, {:s}".format( time_step_value,
                                                              xy_slice_indices[z_index],
                                                              da.name )
 
