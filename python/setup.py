@@ -6,7 +6,7 @@ setup(
     name="iwp",
     version="0.0.1",
     description="Internal Wave Packet Tools",
-    url="https://github.com/gthomsen/iwp",
+    url="https://github.com/gthomsen/iwp-detector",
     author="Greg Thomsen",
     packages=find_packages( include=["iwp"] ),
     scripts=[
