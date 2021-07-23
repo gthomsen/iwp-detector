@@ -43,6 +43,14 @@ def print_usage( program_name, file_handle=sys.stdout ):
     Labels corresponding to each of the XY slices may be overlaid on the data if
     provided.
 
+    The IWP dataset's pattern, <netcdf_pattern>, must be specified as a format string
+    template that is instantiated with each slice's <time_step_index>.  For example,
+    the pattern below assumes the dataset is indexed by zero padded, six digit integers:
+
+       /path/to/iwp/data/dataset-{:06d}.nc
+
+    Wildcard patterns are not supported.
+
     Slices are identified by (time, xy slice) pairs and are specified as one or more
     comma-delimeted pairs, <time_step_index>,<xy_slice_index>.  Slides are generated
     in the order specified on the command line.
@@ -67,7 +75,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
                                      building dataset statistics in stages.  Must contain
                                      statistics for all <variable>s specified. If omitted,
                                      all statistics are computed on the fly on a per-slice
-                                     basis..
+                                     basis.
 """.format(
     program_name=program_name,
     colormap=DEFAULT_COLORMAP_NAME,
