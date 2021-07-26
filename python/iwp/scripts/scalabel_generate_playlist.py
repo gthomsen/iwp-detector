@@ -280,7 +280,7 @@ def main( argv ):
                                                               arguments.url_prefix,
                                                               arguments.component_count,
                                                               labeling_strategy=options.labeling_strategy,
-                                                              check_data_flag=options.force_flag )
+                                                              check_data_flag=(not options.force_flag) )
     except FileNotFoundError as e:
         print( "Could not build Scalabel playlist - {:s}".format(
             str( e ) ),
