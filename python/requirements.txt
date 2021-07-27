@@ -1,8 +1,9 @@
-cudatoolkit=11.1.74
+cudatoolkit
 dask
+jupyter
 netCDF4
 numpy
 python-pptx
-pytorch=1.8.1
+pytorch
 torchvision
 xarray

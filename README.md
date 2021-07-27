@@ -7,18 +7,11 @@ The following packages are required:
 * Python 3
 * CUDA
 * PyTorch
+* Jupyter
 * NetCDF4
 * Dask
 * xarray
 * python-pptx
-
-The following versions have been tested and are explicitly set in the
-`requirements.txt` file referenced below:
-
-* Python 3.8
-* CUDA 11.1
-* PyTorch 1.8.1
-* NetCDF4 1.5.3
 
 # Installation
 
