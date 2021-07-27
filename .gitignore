@@ -13,3 +13,7 @@ python/iwp.egg-info/
 
 # Jupyter notebook checkpoints.
 .ipynb_checkpoints/
+
+# build artifacts for container image creation.
+docker/iwp-development/environment.yml
+docker/iwp-development/ca-certificates.crt
