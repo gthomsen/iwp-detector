@@ -8,6 +8,16 @@ CONTAINER_RUNTIME = podman
 # suffix to use when tagging image names.
 TAG_SUFFIX = latest
 
+# build without a proxy unless we're given one.
+PROXY_URL =
+
+# warn users that proxies with Docker are unnecessarily difficult.
+ifneq ($(strip $(PROXY_URL)),)
+ifeq ($(CONTAINER_RUNTIME),docker)
+$(warning "PROXY_URL is not supported with Docker.  You must update the appropriate config.json to specify one.  This build *MAY* fail.")
+endif
+endif
+
 # locations of certificate authority bundles by system.  only one of these
 # will exist on any given system, which CA_BUNDLE is set to below.
 POTENTIAL_CA_BUNDLES = /etc/ssl/certs/ca-certificates.crt \
@@ -63,6 +73,13 @@ help:
 	@echo "                      are echoed to standard output prior to execution."
 	@echo "   HOST_CA_BUNDLE:    Path to the certificate authority bundle to use during the"
 	@echo "                      build, specified as a path on the host."
+	@echo "   PROXY_URL:         URL to a proxy to build the image with.  This proxy is"
+	@echo "                      not embedded into the image and does not influence users"
+	@echo "                      running the image after creation."
+	@echo
+	@echo "                        NOTE: This cannot be used with Docker.  Proxies must be"
+	@echo "                              set via the appropriate config.json."
+	@echo
 	@echo "   TAG_SUFFIX:        Suffix to build the image tag with.  The build creates"
 	@echo "                      tags of the form <image>:<tag>."
 	@echo
@@ -71,6 +88,7 @@ help:
 	@echo "   CONTAINER_RUNTIME=$(CONTAINER_RUNTIME)"
 	@echo "   DEBUG=$(DEBUG)"
 	@echo "   HOST_CA_BUNDLE=$(HOST_CA_BUNDLE)"
+	@echo "   PROXY_URL=$(PROXY_URL)"
 	@echo "   TAG_SUFFIX=$(TAG_SUFFIX)"
 	@echo
 
@@ -87,7 +105,7 @@ clean:
 
 # create the development image from the contents of its eponymous directory.
 iwp-development: $(patsubst %, iwp-development/%, $(STAGED_ARTIFACTS))
-	$(QUIET) $(CONTAINER_RUNTIME) build -t $@:$(TAG_SUFFIX) $@/
+	$(QUIET) http_proxy=$(PROXY_URL) https_proxy=$(PROXY_URL) $(CONTAINER_RUNTIME) build -t $@:$(TAG_SUFFIX) $@/
 
 # copy the Conda environment YAML into a location visible to the container image
 # build.
