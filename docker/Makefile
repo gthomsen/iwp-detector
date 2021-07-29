@@ -1,3 +1,6 @@
+# identify which OS we're running on.
+SYSTEM_ARCH := $(shell uname)
+
 # build with Podman by default.
 #
 # NOTE: in theory, any runtime should be able to build these images though
@@ -5,15 +8,46 @@
 #
 CONTAINER_RUNTIME = podman
 
+# environment variables, in the form of VAR=VALUE, to provide the image
+# build.  this is built up based on the run-time configuration.
+BUILD_ENVIRONMENT_VARS=
+
+# container runtime command line options to provide to the image build.
+# this is built up based on the run-time configuration.
+BUILD_OPTIONS=
+
 # suffix to use when tagging image names.
 TAG_SUFFIX = latest
+
+# expose the platform type.  by default we don't set one so that the build
+# is native.
+PLATFORM_TYPE =
+
+# force an x86-64 build on MacOS systems.  as of 2021/07/28 we do not support
+# non-x86 systems (e.g. ARM64), though this ensures we use emulation on
+# Apple silicon systems.
+ifeq ($(SYSTEM_ARCH), Darwin)
+PLATFORM_TYPE = linux/amd64
+endif
+
+ifneq ($(strip $(PLATFORM_TYPE)),)
+BUILD_OPTIONS += --platform $(PLATFORM_TYPE)
+endif
 
 # build without a proxy unless we're given one.
 PROXY_URL =
 
-# warn users that proxies with Docker are unnecessarily difficult.
+# update the build environment variables if we are proxied.
 ifneq ($(strip $(PROXY_URL)),)
-ifeq ($(CONTAINER_RUNTIME),docker)
+ifneq ($(CONTAINER_RUNTIME),docker)
+# provide this proxy for both HTTP and HTTPS connections.
+#
+# NOTE: TLS-enabled proxies are provided with HTTP URI's, so it is
+#       okay to supply them for both proxy variables.
+#
+BUILD_ENVIRONMENT_VARS += http_proxy=$(PROXY_URL) https_proxy=$(PROXY_URL)
+else
+# warn users that proxies with Docker are unnecessarily difficult.
 $(warning "PROXY_URL is not supported with Docker.  You must update the appropriate config.json to specify one.  This build *MAY* fail.")
 endif
 endif
@@ -55,6 +89,16 @@ else
 QUIET = @
 endif
 
+# work around semi-broken Docker installations on Darwin.
+#
+# NOTE: this is heavy-handed and really should detect which versions are broken
+#       to work around it.  as is, this simply leaves performance on the table
+#       when the build could benefit from caching of unchanged layers.
+#
+ifeq ($(SYSTEM_ARCH), Darwin)
+BUILD_ENVIRONMENT_VARS += DOCKER_BUILDKIT=0
+endif
+
 # show the user help if they don't provide a build target.
 help:
 	@echo "Internal Wave Packet (IWP) Detector container image build system.  The following"
@@ -73,6 +117,9 @@ help:
 	@echo "                      are echoed to standard output prior to execution."
 	@echo "   HOST_CA_BUNDLE:    Path to the certificate authority bundle to use during the"
 	@echo "                      build, specified as a path on the host."
+	@echo "   PLATFORM_TYPE:     Specify the platform to build the image for.  This is"
+	@echo "                      useful on systems that can build/run architectures other"
+	@echo "                      than their own."
 	@echo "   PROXY_URL:         URL to a proxy to build the image with.  This proxy is"
 	@echo "                      not embedded into the image and does not influence users"
 	@echo "                      running the image after creation."
@@ -88,6 +135,7 @@ help:
 	@echo "   CONTAINER_RUNTIME=$(CONTAINER_RUNTIME)"
 	@echo "   DEBUG=$(DEBUG)"
 	@echo "   HOST_CA_BUNDLE=$(HOST_CA_BUNDLE)"
+	@echo "   PLATFORM_TYPE=$(PLATFORM_TYPE)"
 	@echo "   PROXY_URL=$(PROXY_URL)"
 	@echo "   TAG_SUFFIX=$(TAG_SUFFIX)"
 	@echo
@@ -105,7 +153,7 @@ clean:
 
 # create the development image from the contents of its eponymous directory.
 iwp-development: $(patsubst %, iwp-development/%, $(STAGED_ARTIFACTS))
-	$(QUIET) http_proxy=$(PROXY_URL) https_proxy=$(PROXY_URL) $(CONTAINER_RUNTIME) build -t $@:$(TAG_SUFFIX) $@/
+	$(QUIET) $(BUILD_ENVIRONMENT_VARS) $(CONTAINER_RUNTIME) build $(BUILD_OPTIONS) -t $@:$(TAG_SUFFIX) $@/
 
 # copy the Conda environment YAML into a location visible to the container image
 # build.
