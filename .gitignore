@@ -17,3 +17,9 @@ python/iwp.egg-info/
 # build artifacts for container image creation.
 docker/iwp-development/environment.yml
 docker/iwp-development/ca-certificates.crt
+
+# artifacts from running Scalabel.ai's container out of the repository.  ignore
+# the local Redis database as well as the projects/ directory containing each of
+# the labeling tasks created by the user.
+scalabel/dump.rdb
+scalabel/projects
