@@ -5,6 +5,7 @@ import copy
 import netCDF4
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
 import torch.utils.data.dataset
 import xarray as xr
 
@@ -570,3 +571,80 @@ def open_xarray_dataset( dataset_path_pattern ):
                             preprocess=add_timestep_as_coord )
 
     return ds
+
+def get_data_loader( dataset_path_pattern,
+                     time_indices,
+                     variables=[],
+                     xy_slice_indices=[],
+                     batch_size=128,
+                     number_workers=0,
+                     prefetch_factor=2,
+                     shuffle_flag=True,
+                     pin_memory_flag=True ):
+    """
+    Initializes an DataLoader object that has been seeded with an IWPDatset. The
+    DataLoader acts as a pointer that can be iterated through to get BATCH_SIZE XY slices.
+
+    Takes 9 arguments:
+
+      dataset_path_pattern - Path pattern of the dataset, with a format specifier to instantiate
+                             into a path for each time step.  Each time step's dataset path is
+                             created by formatting dataset_path_pattern with the corresponding
+                             index in time_indices.
+      time_indices         - Sequence of time step indices to create the dataset from.  Scalar
+                             integers may also be specified to indicate a specific time step.
+      variables            - Optional list of variable names in the netCDF files to extract XY
+                             slices when creating the dataset.  If omitted, defaults to all of
+                             the grid variables in te netCDF4 dataset's first time step file
+                             (i.e. all 3D, floating point variables in the file associated
+                             with time_indices[0])).
+
+                             NOTE: The order of the concatenated XY slices matches the order of
+                                   variables.
+
+      xy_slice_indices     - Optional sequence of XY slice indices to create the dataset from.  If
+                             omitted, defaults to all XY slices present.  Scalar integers may
+                             also be specified to indicate a specific XY slice.
+      batch_size           - Optional integer number of xy slices to be returned per batch.
+                             Defaults to a batch size of 1000.
+      number_workers       - Optional integer number of subprocesses to use for data loading.
+                             Defaulted to 0 which means the data will be loaded in the main
+                             process.
+      prefetch_factor      - Optional integer number of data batches that each worker thread
+                             will prefetch. Value is ignored if NUMBER_WORKERS is 0. Defaults
+                             to 2.
+      shuffle_flag         - Optional boolean denoting whether the data should be reshuffled
+                             after every epoch has been processed. Defaults to True.
+      pin_memory_flag      - Optional boolean denoting whether the tensor data batches should
+                             be automatically placed in pinned memory, enabling faster data
+                             transfer to CUDA-enabled GPUs. Defaults to True.
+    Returns 1 value:
+
+      dataloader - A PyTorch DataLoader that represents a Python iterable over the IWP data
+                   defined by DATASET_PATH_PATTERN.
+    """
+
+    iwp_dataset = IWPDataset( dataset_path_pattern,
+                              time_indices,
+                              variables,
+                              xy_slice_indices )
+
+    # create a data loader over the dataset.
+    # NOTE: this ugly if/else block is necessary because PyTorch does not allow speicfying the
+    #       PREFETCH_FACTOR if NUM_WORKERS is 0. even setting the PREFETCH_FACTOR to 'None'
+    #       or '0' results in a ValueError.
+    if( prefetch_factor is not None and number_workers > 0 ):
+        dataloader = DataLoader( dataset=iwp_dataset,
+                                 batch_size=batch_size,
+                                 shuffle=shuffle_flag,
+                                 num_workers=number_workers,
+                                 pin_memory=pin_memory_flag,
+                                 prefetch_factor=prefetch_factor )
+    else:
+        dataloader = DataLoader( dataset=iwp_dataset,
+                                 batch_size=batch_size,
+                                 shuffle=shuffle_flag,
+                                 num_workers=number_workers,
+                                 pin_memory=pin_memory_flag )
+
+    return dataloader
