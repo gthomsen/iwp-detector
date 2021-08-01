@@ -43,6 +43,20 @@ print_usage()
     echo
 }
 
+# predicate function that tests whether the supplied argument is an absolute
+# path or not.  echoes "yes" when the argument starts with a slash ("/"), "no"
+# otherwise.
+is_absolute_path()
+{
+    LOCAL_TEST_PATH="$1"
+
+    if echo "${LOCAL_TEST_PATH}" | grep -q "^/" ; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+
 # default to Docker as alternative run-times aren't as ubiquitous.  run
 # interactively in a terminal and clean up the container image after we
 # shutdown.
@@ -138,10 +152,29 @@ elif [ ! -d "${PROJECTS_HOST_PATH}" ]; then
     exit 1
 fi
 
-# normalize the paths so they're identifiable and understanable in process
-# listings.
+# ensure that we have absolute paths so that container run-times can distinguish
+# them from volume names.  as a nice side effect, this makes them identifiable
+# and understandable in process listings.
 if [ -z "${REALPATH}" ]; then
     echo "Could not find 'realpath' in the PATH.  Supplied paths will not be normalized." >&2
+    echo >&2
+    echo "Attempting to crudely normalize relative paths." >&2
+    echo >&2
+
+    # add the current path to both the items and projects host paths if they
+    # they're relative paths.  this avoids issues with Docker where it
+    # misconstrues relative paths as volume names if they're not absolute.
+    if [ `is_absolute_path "${ITEMS_HOST_PATH}"` = "no" ]; then
+        ITEMS_HOST_PATH=`pwd`"/${ITEMS_HOST_PATH}"
+    fi
+    if [ `is_absolute_path "${PROJECTS_HOST_PATH}"` = "no" ]; then
+        PROJECTS_HOST_PATH=`pwd`"/${PROJECTS_HOST_PATH}"
+    fi
+
+    #
+    # NOTE: we leave CONFIG_CONTAINER_PATH alone since the call to realpath only
+    #       cleaned up the path for display purposes.
+    #
 else
     ITEMS_HOST_PATH=`${REALPATH} ${ITEMS_HOST_PATH}`
     PROJECTS_HOST_PATH=`${REALPATH} ${PROJECTS_HOST_PATH}`
