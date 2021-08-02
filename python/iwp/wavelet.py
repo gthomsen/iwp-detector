@@ -6,8 +6,16 @@ import numpy as np
 # of Mechanics, B/Fluids, Volume 12, Number 1, 1993) for definition of Halo and
 # Arc functions, as well as the 2D extension of the Morlet function.
 #
-# cwt_2d() is the core routine that performs a 2D CWT with the requested wavelet
-# function.  Returns a 3D cube with one 2D, complex CWT per length scale.
+# Two core routines are provided by this module:
+#
+#   1. cwt_2d()          - Performs the 2D CWT with the requested wavelet
+#                          function.  Returns a 3D cube with one 2D, complex CWT
+#                          per length scale.
+#   2. cwt_max_modulus() - Reduces a 3D CWT cube into a single 2D grid
+#                          containing the maximum modulus across all length
+#                          scales.  Useful for identifying the maximum response
+#                          when signals' length scales are bounded but unknown a
+#                          priori.
 #
 # The framework to compute 2D CWTs is structured so that it can be easily ported
 # to GPUs in the future.  The frequency plane construction is decoupled from the
@@ -316,3 +324,40 @@ def cwt_2d( data, scales, wavelet_name, **wavelet_parameters ):
         cwt[scale_index, ...] = np.fft.ifft2( data_spectra * wavelet_filter )
 
     return cwt
+
+def cwt_max_modulus( cwt_data, axis=0, minimum_value=None, maximum_value=None ):
+    """
+    Computes the maximum modulus of the supplied continuous wavelet transforms (CWT),
+    optionally clipping the result above and/or below.  Intended to find the maximum
+    response across length scales for a CWT to use when the signal of interest's scale
+    can vary within a known range.
+
+    Takes 4 arguments:
+
+      cwt_data      - N-D array, for N >= 2, containing a CWT.
+      axis          - Axis to compute the maximum modulus across.  This axis is removed
+                      from cwt_data when computing cwt_modulus.
+      minimum_value - Optional minimum value to clip cwt_modulus against.  If omitted,
+                      no clipping is performed.
+      maximum_value - Optional maximum value to clip cwt_modulus against.  If omitted,
+                      no clipping is performed.
+
+    Returns 1 value:
+
+      cwt_modulus - (N-1)-D array containing the maximum modulus from cwt_data.  The
+                    output shape matches cwt_data's with the axis specified removed.
+
+    """
+
+    # compute the maximum modulus (magnitude) over the axis of interest.
+    cwt_modulus = np.max( np.abs( cwt_data ), axis=axis )
+
+    # clip the bottom end of the data if we're supplied a floor.
+    if minimum_value is not None:
+        cwt_modulus = np.maximum( cwt_modulus, minimum_value )
+
+    # clip the top end of the data if we're supplied a ceiling.
+    if maximum_value is not None:
+        cwt_modulus = np.minimum( cwt_modulus, maximum_value )
+
+    return cwt_modulus
