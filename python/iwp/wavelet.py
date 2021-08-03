@@ -1,3 +1,4 @@
+import functools
 import numpy as np
 
 # Implementation of 2D continuous wavelet transform (CWT) with three wavelet
@@ -174,6 +175,12 @@ _wavelet_filters_map = {
     CWT_ARC:    _cwt_2d_arc
 }
 
+#
+# NOTE: cache the last N frequency planes created.  this reduces the plane
+#       creation to a memory allocation/copy, which for moderately small
+#       sizes (~256x256) results in O(1000) speedup.
+#
+@functools.lru_cache( maxsize=10 )
 def _create_frequency_plane( width, height, dtype=np.float64 ):
     """
     Creates a meshgrid for a normalized frequency plane spanning one wave period (two pi
