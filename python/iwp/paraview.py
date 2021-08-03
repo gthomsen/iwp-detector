@@ -1,3 +1,4 @@
+import numpy as np
 import paraview.simple as pv
 
 import vtk
@@ -15,6 +16,28 @@ import vtk.numpy_interface.dataset_adapter as dsa
 # returned from called method.  the Jupyter ParaView kernel prints each
 # uncaptured variable to the local messages console which is incredibly
 # annoying.
+
+# thoughts on measuring Line-like objects:
+#
+#   I don't understand enough about ParaView's proxy architecture to correctly
+#   identify particular object classes, nor do I have a comprehensive list of
+#   Line-like sources.  given that, we consider any object that has the correct
+#   attributes (i.e. "Point1" and "Point2") to satisfy the Line-like criterion
+#   and work with that.
+#
+# thoughts on coordinate systems:
+#
+#   IWP convention is a left handed system (north, east, up) that is rotated 90
+#   degrees clockwise, such that the positive X axis is "north" and the negative
+#   Y axis is "east".  this means that azimuth is measured relative in degrees
+#   clockwise to the X axis, and elevation is degrees up relative to the XY plane.
+#
+#   this matches the typical presentation of IWP data in literature where XY
+#   planes are viewed from above, with the origin being located either in the
+#   lower left, or left-center, and the tow body track moving from left to right
+#   along the X axis.  positive Z is up such that XY slices with larger Z values
+#   are above those with lower, and the top of the simulation domain is
+#   positioned at the maximum Z value.
 
 def extract_block( filter_name, multiblock_source, output_type, data_information, block_index ):
     """
@@ -350,3 +373,200 @@ def load_xdmf_dataset( source_name, xdmf_path, variables_of_interest, render_var
     _ = animation_scene.UpdateAnimationUsingDataTimeSteps()
 
     return xdmf_source
+
+def is_line_like( source_name, object_flag=False ):
+    """
+    Predicate to determine if a ParaView source is Line-like and has the attributes
+    "Point1" and "Point2".
+
+    Raises ValueError if a source by the supplied name does not exist, or if it is
+    not Line-like.  Returns nothing when it is Line-like.
+
+    Takes 2 arguments:
+
+      source_name - Name of the ParaView object to test.
+      object_flag - Optional flag specifying whether source_name is actually a ParaView
+                    source object instead of a name.  If specified as True, source
+                    lookup by name is skipped.  If omitted, defaults to False.
+
+    Returns nothing.
+
+    """
+
+    # look up the object by name if we need to.
+    if not object_flag:
+        line_like = pv.FindSource( source_name )
+    else:
+        line_like = source_name
+
+    # ensure this source exists.
+    if line_like is None:
+        raise ValueError( "'{:s}' does not exist!".format(
+            source_name ) )
+
+    # ensure that it has two points to draw a line through.
+    #
+    # NOTE: we force the source "name" to a string to ensure we can format
+    #       exception properly.  otherwise we have a type mismatch when
+    #       object_flag is True.
+    #
+    if getattr( line_like, "Point1", None ) is None:
+        raise ValueError( "'{:s}' is not Line-like and is missing the 'Point1' attribute!".format(
+            str( source_name ) ) )
+    elif getattr( line_like, "Point2", None ) is None:
+        raise ValueError( "'{:s}' is not Line-like and is missing the 'Point2' attribute!".format(
+            str( source_name ) ) )
+
+    return
+
+def compute_polar_coordinates( source_name, object_flag=False ):
+    """
+    Computes the polar coordinates of a Line-like ParaView source.  Coordinates
+    are computed relative to the source's origin, rather than ParaView's origin,
+    so that the source's characteristics can be measured.
+
+    This is a convenience wrapper around compute_azimuth(),
+    compute_polar_angle(), and compute_magnitude().
+
+    Raises ValueError if the requested source is not Line-like.  See is_line_like()
+    for details.
+
+    Takes 2 arguments:
+
+      source_name - Name of the ParaView object to test.
+      object_flag - Optional flag specifying whether source_name is actually a ParaView
+                    source object instead of a name.  If specified as True, source
+                    lookup by name is skipped.  If omitted, defaults to False.
+
+    Returns 3 values:
+
+      azimuth   - Azimuth of source_name's object in degrees, clockwise relative to
+                  the line X=0.  See compute_azimuth() for details on the value
+                  returned when magnitude is 0 or the elevation is +-90 degrees.
+      elevation - Elevation of source_name's object in degrees, up relative to XY
+                  plane.  See compute_elevation() for details on the value
+                  returned when magnitude is 0.
+      magnitude - Magnitude of the source_name's object.
+
+    """
+
+    # look up the object by name if we need to.
+    if not object_flag:
+        # find the object so we don't have to do this once per coordinate.
+        source_name = pv.FindSource( source_name )
+        object_flag = True
+
+    return (compute_azimuth( source_name, object_flag=object_flag ),
+            compute_elevation( source_name, object_flag=object_flag ),
+            compute_magnitude( source_name, object_flag=object_flag ))
+
+def compute_azimuth( source_name, object_flag=False ):
+    """
+    Computes the azimuth of a Line-like ParaView source.  Azimuth is measured in
+    degrees clockwise from the X=0 line (in a rotated NEU system).
+
+    Takes 2 arguments:
+
+      source_name - Name of the ParaView object to test.
+      object_flag - Optional flag specifying whether source_name is actually a ParaView
+                    source object instead of a name.  If specified as True, source
+                    lookup by name is skipped.  If omitted, defaults to False.
+
+    Returns 1 value:
+
+      azimuth - Degrees, clockwise, relative to the line X=0.  The returned value
+                for Line-like objects with 0 magnitude or elevations of +-90
+                matches NumPy's arctan2() method.
+
+    """
+
+    # get our source.
+    if not object_flag:
+        line_like = pv.FindSource( source_name )
+    else:
+        line_like = source_name
+
+    #
+    # NOTE: this only returns when we have a Line-like object, otherwise
+    #       we raise ValueError.
+    #
+    is_line_like( line_like, object_flag=True )
+
+    point1 = np.array( line_like.Point1 )
+    point2 = np.array( line_like.Point2 )
+
+    return (np.arctan2( (point2[0] - point1[0]),
+                        (point2[1] - point1[1]) ) / np.pi * 180) - 90
+
+def compute_elevation( source_name, object_flag=False ):
+    """
+    Computes the elevation of a Line-like ParaView source.  Elevation is measured in
+    degrees up from the XY plane (in a rotated NEU system).
+
+    Takes 2 arguments:
+
+      source_name - Name of the ParaView object to test.
+      object_flag - Optional flag specifying whether source_name is actually a ParaView
+                    source object instead of a name.  If specified as True, source
+                    lookup by name is skipped.  If omitted, defaults to False.
+
+    Returns 1 value:
+
+      elevation - Degrees, up, from the XY plane.  The returned value for Line-like
+                  objects with 0 magnitude matches NumPy's arctan2() method.
+
+    """
+
+    # get our source.
+    if not object_flag:
+        line_like = pv.FindSource( source_name )
+    else:
+        line_like = source_name
+
+    #
+    # NOTE: this only returns when we have a Line-like object, otherwise
+    #       we raise ValueError.
+    #
+    is_line_like( line_like, object_flag=True )
+
+    point1 = np.array( line_like.Point1 )
+    point2 = np.array( line_like.Point2 )
+
+    return (np.arctan2( np.sqrt( (point2[0] - point1[0])**2 + (point2[1] - point1[1])**2 ),
+                        (point2[2] - point1[2]) ) / np.pi * 180)
+
+def compute_magnitude( source_name, object_flag=False ):
+    """
+    Computes the magnitude of a Line-like ParaView source.
+
+    Takes 2 arguments:
+
+      source_name - Name of the ParaView object to test.
+      object_flag - Optional flag specifying whether source_name is actually a ParaView
+                    source object instead of a name.  If specified as True, source
+                    lookup by name is skipped.  If omitted, defaults to False.
+
+    Returns 1 value:
+
+      magnitude - Non-negative length of source_name.
+
+    """
+
+    # get our source.
+    if not object_flag:
+        line_like = pv.FindSource( source_name )
+    else:
+        line_like = source_name
+
+    #
+    # NOTE: this only returns when we have a Line-like object, otherwise
+    #       we raise ValueError.
+    #
+    is_line_like( line_like, object_flag=True )
+
+    point1 = np.array( line_like.Point1 )
+    point2 = np.array( line_like.Point2 )
+
+    return np.sqrt( (point2[0] - point1[0])**2 +
+                    (point2[1] - point1[1])**2 +
+                    (point2[2] - point1[2])**2 )
