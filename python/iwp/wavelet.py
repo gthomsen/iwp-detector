@@ -334,7 +334,10 @@ def cwt_max_modulus( cwt_data, axis=0, minimum_value=None, maximum_value=None ):
 
     Takes 4 arguments:
 
-      cwt_data      - N-D array, for N >= 2, containing a CWT.
+      cwt_data      - N-D array, for N >= 2, containing a CWT.  May also be specified
+                      as a list of N-D arrays, each with the same shape, that are
+                      pair-wise reduced via np.maximum() after taking the maximum
+                      modulus.
       axis          - Axis to compute the maximum modulus across.  This axis is removed
                       from cwt_data when computing cwt_modulus.
       minimum_value - Optional minimum value to clip cwt_modulus against.  If omitted,
@@ -349,8 +352,27 @@ def cwt_max_modulus( cwt_data, axis=0, minimum_value=None, maximum_value=None ):
 
     """
 
-    # compute the maximum modulus (magnitude) over the axis of interest.
-    cwt_modulus = np.max( np.abs( cwt_data ), axis=axis )
+    # are we working with a single CWT or a list of them?
+    if not isinstance( cwt_data, list ):
+        # handle the base case and compute the maximum modulus (magnitude) over
+        # the axis of interest.
+        cwt_modulus = np.max( np.abs( cwt_data ), axis=axis )
+    else:
+        # create the base modulus since we have at least two CWTs to compute the
+        # maximum over.  we'll update the maximum against the remaining CWTs
+        # one-by-one.  this is effectively functools.reduce(), except we have
+        # to do it ourself since this method does not take two values to reduce.
+        #
+        # NOTE: we do not clip the values here as we can do that once all
+        #       of the CWTs have been reduced.  this cuts down the number
+        #       of calls to np.maximum() by a factor of three.
+        #
+        cwt_modulus = np.maximum( cwt_max_modulus( cwt_data[0], axis ),
+                                  cwt_max_modulus( cwt_data[1], axis ) )
+
+        for this_cwt_data in cwt_data[2:]:
+            cwt_modulus = np.maximum( cwt_modulus,
+                                      cwt_max_modulus( this_cwt_data, axis ) )
 
     # clip the bottom end of the data if we're supplied a floor.
     if minimum_value is not None:
