@@ -1,4 +1,3 @@
-import paraview.util
 import paraview.simple as pv
 
 import vtk
@@ -172,7 +171,7 @@ def get_variable_point_arrays( source_name, variable_names, shape=None, block_in
 
         # handle the case where we can't find a suitable block.
         if block_index == number_blocks:
-            raise RuntimeException( "Failed to find a suitable block!" )
+            raise RuntimeError( "Failed to find a suitable block!" )
 
     arrays = []
 
