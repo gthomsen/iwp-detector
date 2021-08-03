@@ -110,7 +110,12 @@ def get_variable_point_arrays( source_name, variable_names, shape=None, block_in
 
     Raises exceptions if the requested source does not exist, when the PointArray
     data cannot be reshaped or if the source object does not have the requested block.
-    XXX: specify the actual exceptions.
+
+    Raises ValueError if the named source does not exist or if it does not contain
+    the requested variables.
+
+    Raises RuntimeError if a specific block is not requested and a viable one cannot
+    be found in the dataset.
 
     Takes 4 arguments:
 
