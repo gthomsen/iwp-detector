@@ -553,3 +553,32 @@ class XDMFGenerator( object ):
             time_step_fragments=time_step_fragments )
 
         return xdmf_document
+
+    def serialize( self, xdmf_path ):
+        """
+        Serializes the internal XDMF document to the path supplied.
+
+        Raises OSError if the path supplied cannot be opened for writing.  May raise
+        other exceptions if a file-like object is provided and serialization fails.
+
+        Takes 1 value:
+
+          xdmf_path - Path to write the XDMF document.  May also be a file-like object
+                      that provides a write() method.
+
+        Returns 1 value:
+
+          number_bytes - Number of bytes written to xdmf_path when serializing the
+                         XDMF document.
+
+        """
+
+        # directly write to the file-like if we were given one, otherwise open
+        # it and write to that.
+        if hasattr( xdmf_path, "write" ):
+            number_bytes = xdmf_path.write( self.generate() )
+        else:
+            with open( xdmf_path, "w" ) as xdmf_fp:
+                number_bytes = xdmf_fp.write( self.generate() )
+
+        return number_bytes
