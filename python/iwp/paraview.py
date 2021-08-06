@@ -5,6 +5,8 @@ import warnings
 import vtk
 import vtk.numpy_interface.dataset_adapter as dsa
 
+import iwp.labels
+
 # utility routines for working within a ParaView instance.  these are assumed to
 # be run from within 1) a ParaView Python prompt, 2) a pvbatch instance, 3) a
 # pvpython instance, or 4) a Jupyter ParaView kernel.
@@ -887,6 +889,153 @@ def create_xy_labels( iwp_labels, z_coordinates, color=None ):
 
         paraview_labels.append( paraview_label )
         label_names.append( label_name )
+
+    # make each of the labels visible.
+    pv.Render()
+
+    return paraview_labels, label_names
+
+def create_xyz_labels( iwp_labels, z_coordinates, color=None, keep_points_flag=False ):
+    """
+    Creates 3D labels in ParaView from a list of IWP labels.  Each 3D label created
+    is the collection of edges outlining the corners of each XY slice labeled, so as to
+    highlight the IWP's features.  Created labels do not have a concept of time and 
+    are simply positioned within the visualized domain.
+
+    Each label has a structured name so as to be easily identified, and adhere to the
+    following convention:
+
+       XYZ Label - <label id> (z/D=[<z min>, <z max>])
+
+    Where <z min> and <z max> are the edges of the label's vertical extent and
+    have 2 digits after the decimal point.
+
+    If a ParaView label with the same name already exists, its position and extent
+    are updated.
+
+    Takes 4 arguments:
+
+      iwp_labels       - List of IWP labels to create XYZ labels for.
+      z_coordinates    - NumPy array of Z coordinates for the labels.  Used to translate
+                         IWP labels' z_index into the coordinate system their bounding
+                         boxes are already in.
+      color            - Optional sequence, with three elements, specifying the RGB
+                         values of the label.  Each element must be in the range [0, 1].
+                         If omitted, defaults to magenta (1, 0, 1).
+      keep_points_flag - Optional flag specifying whether the underlying points used
+                         to create the labels' outlines should be kept.  If specified
+                         as True, an additional ParaView is created for each label
+                         containing the corner points for each label, and has the same
+                         name with the suffix " - Points" added.  If omitted, defaults
+                         to False.
+
+    Returns 2 values:
+
+      paraview_labels - List of ParaView objects created or updated, one per label.  The
+                        order matches the order of label_names.
+      label_names     - List of label names created or updated, one per label.  The
+                        order matches the order of paraview_labels.
+
+    """
+
+    # we return both objects and names of the labels created.
+    paraview_labels = []
+    label_names     = []
+
+    render_view = pv.GetActiveViewOrCreate( "RenderView" )
+
+    if color is None:
+        # default to magenta since its high contrast relative to most common colormaps.
+        color = [1.0, 0.0, 1.0]
+
+    # get the unique label names so we can work each one separately.
+    label_identifiers = set( map( lambda iwp_label: iwp_label["id"], iwp_labels ) )
+
+    # partition our labels by name and put them into a dictionary for quick
+    # lookup.
+    labels_map = {}
+    for iwp_label in iwp_labels:
+        if iwp_label["id"] in labels_map:
+            labels_map[iwp_label["id"]].append( iwp_label )
+        else:
+            labels_map[iwp_label["id"]] = [iwp_label]
+
+    for label_identifier in label_identifiers:
+        # get this identifier's labels.
+        named_iwp_labels = labels_map[label_identifier]
+
+        # convert the labels into matrix of corners, one per label.
+        label_corners = iwp.labels.convert_iwp_bboxes_to_array( named_iwp_labels,
+                                                                z_coordinates )
+
+        # identify the edges of the vertical extent.
+        (minimum_z, maximum_z) = (label_corners[:, 2::3].min(),
+                                  label_corners[:, 2::3].max())
+
+        # name this label and provide its vertical extent.  the triangulation
+        # is our "label" and the polypoints are supplemental/debugging information.
+        label_base_name = "XYZ Label - {:s} (z/D=[{:.2f}, {:.2f}])".format(
+            label_identifier,
+            minimum_z,
+            maximum_z )
+        delaunay3d_name = label_base_name
+        polypoints_name = "{:s} - Points".format( label_base_name )
+
+        # create a PolyPoint object that has all of this identifier's
+        # labels' corners.
+        paraview_polypoints = pv.PolyPointSource( registrationName=polypoints_name )
+
+        # polypoints takes a flattened list of (x, y, z) points.
+        paraview_polypoints.Points = list( label_corners.ravel() )
+
+        # are we keeping the PolyPoints source after we triangulate?
+        if keep_points_flag:
+            # briefly show the polypoints so we can set their color and line width,
+            # though only if we're ultimately keeping them.  this ensures they're
+            # properly rendered should the user toggle their visibility later.
+
+            # render the polypoints as individual points with the color of interest.
+            # make the points slightly bigger than the default (2.0) so they're
+            # visible from afar.
+            paraview_polypoints_display = pv.Show( paraview_polypoints,
+                                                   render_view,
+                                                   "SurfaceRepresentation" )
+            paraview_polypoints_display.Representation = "Points"
+            paraview_polypoints_display.AmbientColor   = color
+            paraview_polypoints_display.DiffuseColor   = color
+            paraview_polypoints_display.PointSize      = 3.0
+
+            # and hide them so we don't clutter the display.
+            pv.Hide( paraview_polypoints )
+
+        paraview_delaunay3d = pv.Delaunay3D( registrationName=delaunay3d_name,
+                                             Input=paraview_polypoints )
+
+        # render the 3D triangulation as feature edges (i.e. exterior edges) in
+        # the color of interest.  thicken the lines so they're visible from
+        # afar.
+        paraview_delaunay3d_display = pv.Show( paraview_delaunay3d,
+                                               render_view,
+                                               "FeatureEdgesRepresentation" )
+        paraview_delaunay3d_display.Representation = "Feature Edges"
+        paraview_delaunay3d_display.AmbientColor   = color
+        paraview_delaunay3d_display.DiffuseColor   = color
+        paraview_delaunay3d_display.LineWidth      = 3.0
+
+        # XXX: create a text annotation with the label identifier so they can be
+        #      visually recognized.
+
+        # keep track of our 3D triangulation.
+        paraview_labels.append( paraview_delaunay3d )
+        label_names.append( delaunay3d_name )
+
+        # keep or delete the underlying points, depending on the caller's request.
+        if keep_points_flag:
+            paraview_labels.append( paraview_polypoints )
+            label_names.append( polypoints_name )
+        else:
+            pv.Delete( paraview_polypoints )
+            del paraview_polypoints
 
     # make each of the labels visible.
     pv.Render()

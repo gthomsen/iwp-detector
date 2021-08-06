@@ -2,6 +2,7 @@ import collections
 import copy
 import enum
 import json
+import numpy as np
 
 # module for all things related to labels, IWP or otherwise.
 #
@@ -539,3 +540,69 @@ def filter_iwp_labels( iwp_labels, time_range=[], z_range=[], identifiers=[] ):
         filtered_iwp_labels.append( iwp_label )
 
     return filtered_iwp_labels
+
+def convert_iwp_bboxes_to_corners( iwp_labels, z_coordinates=None, two_d_flag=False ):
+    """
+    Converts IWP labels' bounding boxes (upper-left and lower-right corners) to a
+    flattened NumPy array containing the four corners.  Each corner is returned
+    as a flattened array such that each corner's coordinates are interleaved
+    as 12 values like so:
+
+        (x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4)
+
+    Optionally converts Z indices into Z coordinates if a coordinate axes is provided.
+
+    This routine provides compatibility with systems that require explicit geometry,
+    such as ParaView.
+
+    Takes 3 arguments:
+
+      iwp_labels    - List of IWP labels to convert.
+      z_coordinates - Optional NumPy array-like containing the Z coordinates.  When
+                      specified, each label's Z index is converted to a Z coordinate.
+                      If omitted, defaults to None and skips coordinate conversion.
+      two_d_flag    - Optional flag specifying whether the output array should be
+                      2D or 3D.  If True, bboxes is 2D, otherwise 3D.  If omitted,
+                      defaults to False.
+
+    Returns 1 value:
+
+      bboxes - NumPy array, shaped (len( iwp_labels ), N), containing the flattened
+               corners.  N is 12 when 3D outputs are requested (two_d_flag == False),
+               or 8 when 2D requested outputs are requested (two_d_flag == True).
+
+    """
+
+    # each label generates four (x, y, z) corners: 1) top left, 2) top right,
+    # 3) bottom right, and 4) bottom left.
+    bboxes = np.empty( (len( iwp_labels ), 12) )
+
+    for label_index, iwp_label in enumerate( iwp_labels ):
+        # corner #1 - top left.
+        bboxes[label_index, 0] = iwp_label["bbox"]["x1"]
+        bboxes[label_index, 1] = iwp_label["bbox"]["y1"]
+        bboxes[label_index, 2] = iwp_label["z_index"]
+
+        # corner #2 - top right.
+        bboxes[label_index, 3] = iwp_label["bbox"]["x2"]
+        bboxes[label_index, 4] = iwp_label["bbox"]["y1"]
+        bboxes[label_index, 5] = iwp_label["z_index"]
+
+        # corner #3 - bottom right.
+        bboxes[label_index, 6] = iwp_label["bbox"]["x2"]
+        bboxes[label_index, 7] = iwp_label["bbox"]["y2"]
+        bboxes[label_index, 8] = iwp_label["z_index"]
+
+        # corner #4 - bottom left.
+        bboxes[label_index, 9]  = iwp_label["bbox"]["x1"]
+        bboxes[label_index, 10] = iwp_label["bbox"]["y2"]
+        bboxes[label_index, 11] = iwp_label["z_index"]
+
+    # trim off the z coordinate if requested.
+    if two_d_flag:
+        bboxes = bboxes[:, 0:2]
+    # otherwise, map from z indices to z coordinates when a lookup table is provided.
+    elif z_coordinates is not None:
+        bboxes[:, 2::3] = z_coordinates[bboxes[:, 2::3].astype( np.int32 )]
+
+    return bboxes
