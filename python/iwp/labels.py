@@ -461,3 +461,48 @@ def scale_iwp_label_coordinates( iwp_labels, width, height, in_place_flag=False 
         iwp_label["bbox"]["y2"] = iwp_label["bbox"]["y2"] * height
 
     return iwp_labels
+
+def filter_iwp_labels( iwp_labels, time_range=[], z_range=[], identifiers=[] ):
+    """
+    Filters a list of IWP labels by time range, XY slice range, or by identifier
+    name.  IWP labels that match the specified criteria are returned.  Time and
+    slice ranges are inclusive.
+
+    Takes 4 arguments:
+
+      iwp_labels  - List of IWP labels to filter.
+      time_range  - Optional sequence of start and stop time indices to filter
+                    by.  May be specified as an empty sequence to keep labels
+                    from any time.  If omitted, defaults to an empty sequence.
+      z_range     - Optional sequence of start and stop Z indices to filter by.
+                    May be specified as an empty sequence to keep labels with
+                    any Z index.  If omitted, defaults to an empty sequence.
+      identifiers - Optional list of identifier names to filter by.  May be
+                    specified as an empty sequence to keep labels with any
+                    identifier.  If omitted, defaults to an empty sequence.
+
+    Returns 1 value:
+
+      filtered_iwp_labels - List of IWP labels that satisfy the criteria provided
+                            by time_range, z_range, and identifiers.
+
+    """
+
+    filtered_iwp_labels = []
+
+    for iwp_label in iwp_labels:
+        # run the gauntlet of the filters.  only keep the labels that match
+        # all of the provided constraints.
+        if ((len( time_range ) == 2) and
+            not (time_range[0] <= iwp_label["time_index"] <= time_range[1])):
+            continue
+        elif ((len( z_range ) == 2) and
+            not (z_range[0] <= iwp_label["z_index"] <= z_range[1])):
+            continue
+        elif ((len( identifiers ) > 0) and
+              iwp_label["id"] not in identifiers):
+            continue
+
+        filtered_iwp_labels.append( iwp_label )
+
+    return filtered_iwp_labels
