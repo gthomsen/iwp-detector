@@ -791,3 +791,104 @@ def get_structured_grid_coordinates( source_name, block_index=-1 ):
         z_coordinates[z_index] = vtk_z_coordinates.GetTuple1( z_index )
 
     return (x_coordinates, y_coordinates, z_coordinates)
+
+def create_xy_labels( iwp_labels, z_coordinates, color=None ):
+    """
+    Creates 2D labels in ParaView from a list of IWP labels.  Each 2D label created
+    is a box outline in a particular XY slice so as to highlight an IWP's features.
+    Created labels do not have a concept of time and are simply positioned within the
+    visualized domain.
+
+    Each label has a structured name so as to be easily identified, and adhere to the
+    following convention:
+
+       XY Label - <label id> (z/D=<z coord>)
+
+    Where <z coord> has 2 digits after the decimal point.
+
+    If a ParaView label with the same name already exists, its position and extent
+    are updated.
+
+    NOTE: This method will create arbitrary numbers of label objects though callers
+          should be mindful that large numbers of labels will slow ParaView during
+          creation and clutter its pipeline browser.  Note that this is exacerbated
+          even further if Python tracing is enabled.
+
+    Takes 3 arguments:
+
+      iwp_labels    - List of IWP labels to create XY labels for.
+      z_coordinates - NumPy array of Z coordinates for the labels.  Used to translate
+                      IWP labels' z_index into the coordinate system their bounding
+                      boxes are already in.
+      color         - Optional sequence, with three elements, specifying the RGB
+                      values of the label.  Each element must be in the range [0, 1].
+                      If omitted, defaults to magenta (1, 0, 1).
+
+    Returns 2 values:
+
+      paraview_labels - List of ParaView objects created or updated, one per label, in
+                        the same order as iwp_labels.
+      label_names     - List of label names created or updated, one per label, in the
+                        same order as iwp_labels.
+
+    """
+
+    # default the label color if not supplied one.  we use magenta since it
+    # is high contrast to most of the common colormaps.
+    if color is None:
+        color = [1.0, 0.0, 1.0]
+
+    # get a rendering context so we can display the labels below.
+    render_view = pv.GetActiveViewOrCreate( "RenderView" )
+
+    # we return both objects and names of the labels created.
+    paraview_labels = []
+    label_names     = []
+
+    for iwp_label in iwp_labels:
+        # map from indices to coordinates.  we assume the rest of the label is
+        # already in the appropriate coordinate system.
+        z_coordinate = z_coordinates[iwp_label["z_index"]]
+
+        label_name = "XY Label - {:s} (z/D={:.2f})".format(
+            iwp_label["id"],
+            z_coordinate )
+
+        # create a new label if this one doesn't already exist.  otherwise we're
+        # updating the existing.
+        paraview_label = pv.FindSource( label_name )
+        if paraview_label is None:
+            paraview_label = pv.Box( registrationName=label_name )
+
+        # convert our (top-left, bottom-right) labels into (center, extent)
+        # boxes.
+        #
+        # NOTE: we're creating planar labels without any vertical extent.
+        #
+        paraview_label.Center = [(iwp_label["bbox"]["x2"] - iwp_label["bbox"]["x1"]) / 2 + iwp_label["bbox"]["x1"],
+                                 (iwp_label["bbox"]["y2"] - iwp_label["bbox"]["y1"]) / 2 + iwp_label["bbox"]["y1"],
+                                 z_coordinate]
+
+        paraview_label.XLength = iwp_label["bbox"]["x2"] - iwp_label["bbox"]["x1"]
+        paraview_label.YLength = iwp_label["bbox"]["y2"] - iwp_label["bbox"]["y1"]
+        paraview_label.ZLength = 0
+
+        paraview_label_display = pv.Show( paraview_label, render_view, "OutlineRepresentation" )
+
+        # set the label's color.
+        paraview_label_display.AmbientColor = color
+        paraview_label_display.DiffuseColor = color
+
+        # make these visible by thickening the border.
+        paraview_label_display.LineWidth = 3.0
+
+        # XXX: create a text annotation with the label identifier so they can be
+        #      visually recognized.
+
+        paraview_labels.append( paraview_label )
+        label_names.append( label_name )
+
+    # make each of the labels visible.
+    pv.Render()
+
+    return paraview_labels, label_names
