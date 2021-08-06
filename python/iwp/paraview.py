@@ -40,6 +40,53 @@ import vtk.numpy_interface.dataset_adapter as dsa
 #   are above those with lower, and the top of the simulation domain is
 #   positioned at the maximum Z value.
 
+def _locate_data_in_multiblock( paraview_source ):
+    """
+    Identifies the first block in a multi-block ParaView source that contains data.
+
+    Raises ValueError if the supplied source is not multi-block.
+
+    Raises RuntimeError if a block with data cannot be located.
+
+    Takes 1 argument:
+
+      paraview_source - Multi-block ParaView object.
+
+    Returns 1 value:
+
+      block_index - Index, in the range of [0, number_blocks), to the first block
+                    that contains data.
+
+    """
+
+    multiblock_flag = (paraview_source.GetDataInformation().GetDataSetType() ==
+                       vtk.VTK_MULTIBLOCK_DATA_SET)
+
+    # make sure we're working with a multi-block dataset.
+    if not multiblock_flag:
+        raise ValueError( "Supplied ParaView object ({}) is not a multi-block dataset.".format(
+            paraview_source ) )
+
+    composite_data_information = paraview_source.GetDataInformation().GetCompositeDataInformation()
+    number_blocks              = composite_data_information.GetNumberOfChildren()
+
+    # walk through each of the blocks and stop at the first one containing data.
+    for block_index in range( number_blocks ):
+        data_information = composite_data_information.GetDataInformation( block_index )
+
+        # blocks that do not contain data (e.g. grid only) will not have a
+        # DataInformation structure.
+        if data_information is None:
+            continue
+        else:
+            break
+
+    # handle the case where we can't find a suitable block.
+    if block_index == number_blocks:
+        raise RuntimeError( "Failed to find a suitable block!" )
+
+    return block_index
+
 def extract_block( filter_name, multiblock_source, output_type, data_information, block_index ):
     """
     Extracts a block from a multi-block source and adds it into the pipeline.
@@ -186,25 +233,11 @@ def get_variable_point_arrays( source_name, variable_names, shape=None, block_in
                        vtk.VTK_MULTIBLOCK_DATA_SET)
 
     # find a suitable block if one wasn't requested.
+    #
+    # NOTE: this raises RuntimeError if we can't find a suitable block.
+    #
     if multiblock_flag and (block_index == -1):
-        composite_data_information = paraview_source.GetDataInformation().GetCompositeDataInformation()
-        number_blocks              = composite_data_information.GetNumberOfChildren()
-
-        # walk through each of the blocks and stop at the first one containing
-        # data.
-        for block_index in range( number_blocks ):
-            data_information = composite_data_information.GetDataInformation()
-
-            # blocks that do not contain data (e.g. grid only) will not have a
-            # DataInformation structure.
-            if data_information is None:
-                continue
-            else:
-                break
-
-        # handle the case where we can't find a suitable block.
-        if block_index == number_blocks:
-            raise RuntimeError( "Failed to find a suitable block!" )
+        block_index = _locate_data_in_multiblock( paraview_source )
 
     arrays = []
 
@@ -669,3 +702,92 @@ def show( source_names, object_flag=False ):
     pv.Render()
 
     return
+
+def get_structured_grid_coordinates( source_name, block_index=-1 ):
+    """
+    Returns the grid coordinates for a structured grid source.  Only
+
+    Raises ValueError if the supplied source is not a structured grid.
+
+    Raises RuntimeError if supplied a multi-block source and the requested block
+    is invalid.
+
+    Takes 2 arguments:
+
+      source_name - Name of the ParaView source to extract coordinates from.  Must
+                    be one of "vtkImageClass", "vtkRectilinearGrid", or
+                   "vtkStructuredGrid" otherwise ValueError is raised.
+      block_index - Optional index specifying which block, from a multi-block source,
+                    to extract coordinates from.  If omitted, it defaults to the
+                    first block that contains data.  This parameter is ignored when
+                    source_name is not a multi-block object.
+
+                      NOTE: This ignores non-data blocks which may contain grids.
+                            If those are of interest, specify the appropriate block
+                            index.
+
+    Returns 1 value:
+
+      coordinates - Tuple with 3 elements, each a NumPy array containing the coordinates
+                    for the X-, Y-, and Z-axes, respectively.
+
+    """
+
+    # find the source object and get its underlying VTK object.
+    paraview_source = pv.FindSource( source_name )
+    vtk_source      = pv.servermanager.Fetch( paraview_source )
+
+    multiblock_flag = (paraview_source.GetDataInformation().GetDataSetType() ==
+                       vtk.VTK_MULTIBLOCK_DATA_SET)
+
+    # hide(ish) the fact that the original object was multi-block.
+    if multiblock_flag:
+        # find a suitable block if one wasn't requested.
+        #
+        # NOTE: this raises RuntimeError if we can't find a suitable block.
+        #
+        if block_index == -1:
+            block_index = _locate_data_in_multiblock( paraview_source )
+
+        vtk_source = vtk_source.GetBlock( block_index )
+
+    # we now have *the* VTK object.
+    vtk_class_name = vtk_source.GetClassName()
+
+    # ensure that we're working with an object that has 1D coordinate.
+    structured_grid_names = ["vtkImageData",
+                             "vtkRectilinearGrid",
+                             "vtkStructuredGrid"]
+    if vtk_class_name not in structured_grid_names:
+        raise ValueError( "'{:s}' is not a structured grid!  Must be one of {:s}.".format(
+            vtk_class_name,
+            ", ".join( map( lambda x: "'" + x + "'",
+                            structured_grid_names ) ) ) )
+
+    # get the VTKDoubleArray objects for each of the coordinate axes.
+    vtk_x_coordinates = vtk_source.GetXCoordinates()
+    vtk_y_coordinates = vtk_source.GetYCoordinates()
+    vtk_z_coordinates = vtk_source.GetZCoordinates()
+
+    grid_shape = (vtk_x_coordinates.GetSize(),
+                  vtk_y_coordinates.GetSize(),
+                  vtk_z_coordinates.GetSize())
+
+    # pre-allocate our coordinate arrays.
+    x_coordinates = np.empty( (grid_shape[0], ) )
+    y_coordinates = np.empty( (grid_shape[1], ) )
+    z_coordinates = np.empty( (grid_shape[2], ) )
+
+    # pull each of the arrays' entries one by one.
+    #
+    # NOTE: there has got to be a better interface here, though until then, be
+    #       mindful of the performance characteristics of this method.
+    #
+    for x_index in range( grid_shape[0] ):
+        x_coordinates[x_index] = vtk_x_coordinates.GetTuple1( x_index )
+    for y_index in range( grid_shape[1] ):
+        y_coordinates[y_index] = vtk_y_coordinates.GetTuple1( y_index )
+    for z_index in range( grid_shape[2] ):
+        z_coordinates[z_index] = vtk_z_coordinates.GetTuple1( z_index )
+
+    return (x_coordinates, y_coordinates, z_coordinates)
