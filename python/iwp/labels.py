@@ -462,6 +462,39 @@ def scale_iwp_label_coordinates( iwp_labels, width, height, in_place_flag=False 
 
     return iwp_labels
 
+def flipud_iwp_label_coordinates( iwp_labels, height, in_place_flag=False ):
+    """
+    Flips a list of IWP labels' Y coordinate about a midpoint to change their origin
+    (from top to bottom, and vice versa).  This is useful for working with labels
+    coming from tools that do not explicitly specify their coordinate system (e.g.
+    Scalabel.ai) so they're usable in tools that do (e.g. ParaView).
+
+    Takes 3 arguments:
+
+      iwp_labels    - List of IWP labels whose bounding boxes will be scaled.
+      height        - Numeric height to scale the bounding boxes' Y coordinates.
+      in_place_flag - Optional flag specifying in place update or an update to a
+                      copy of the labels.  If omitted, defaults to False and a new
+                      list of IWP labels is returned.
+
+    Returns 1 value:
+
+      iwp_labels - List of IWP labels with flipped Y coordinates.
+
+    """
+
+    if not in_place_flag:
+        iwp_labels = copy.deepcopy( iwp_labels )
+
+    for iwp_label in iwp_labels:
+        new_y2 = height - iwp_label["bbox"]["y1"]
+        new_y1 = height - iwp_label["bbox"]["y2"]
+
+        iwp_label["bbox"]["y1"] = new_y1
+        iwp_label["bbox"]["y2"] = new_y2
+
+    return iwp_labels
+
 def filter_iwp_labels( iwp_labels, time_range=[], z_range=[], identifiers=[] ):
     """
     Filters a list of IWP labels by time range, XY slice range, or by identifier
