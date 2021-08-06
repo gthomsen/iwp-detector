@@ -2,6 +2,8 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+import numpy as np
+
 # collection of routines to aide in analyzing IWP data.
 
 def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map=cm.bwr, rotate_flag=False ):
@@ -70,3 +72,26 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
     ax_h.set_title( variable_name )
 
     return slice_h
+
+def find_nearest( data, value ):
+    """
+    Finds the nearest value in an array and returns it and its location.
+
+    Takes 2 arguments:
+
+      data  - NumPy Array-like to search for value.
+      value - Target value to search for in data.
+
+    Returns 2 values:
+
+      nearest_value - Closest value to value found in data.
+      nearest_index - Index of nearest_value in data.
+
+    """
+
+    # coerce the data into an actual array.
+    data = np.asarray( data )
+
+    value_index = (np.abs( data - value )).argmin()
+
+    return data[value_index], value_index
