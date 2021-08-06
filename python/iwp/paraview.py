@@ -1,5 +1,6 @@
 import numpy as np
 import paraview.simple as pv
+import warnings
 
 import vtk
 import vtk.numpy_interface.dataset_adapter as dsa
@@ -570,3 +571,101 @@ def compute_magnitude( source_name, object_flag=False ):
     return np.sqrt( (point2[0] - point1[0])**2 +
                     (point2[1] - point1[1])**2 +
                     (point2[2] - point1[2])**2 )
+
+def delete( source_names, object_flag=False ):
+    """
+    Deletes one or more ParaView objects by name or reference.  Releases resources for
+    both the ParaView object and the underlying Python object.
+
+    Takes 2 arguments:
+
+      source_names - List of ParaView source names to delete.
+      object_flag  - Optional flag specifying whether source_names contains names
+                     (False) or object references (True).  If omitted, defaults to False.
+
+    Returns nothing.
+
+    """
+
+    render_view = pv.GetActiveViewOrCreate( "RenderView" )
+
+    for source_name in source_names:
+        if object_flag:
+            paraview_object = source_name
+        else:
+            paraview_object = pv.FindSource( source_name )
+
+            if paraview_object is None:
+                warnings.warn( "Cannot find an object named '{:s}.  Skipping.'".format(
+                    source_name ) )
+
+        _ = pv.Hide( paraview_object )
+        pv.Delete( paraview_object )
+        del paraview_object
+
+    # force a visual update to remove any objects we just deleted.
+    pv.Render()
+
+    return
+
+def hide( source_names, object_flag=False ):
+    """
+    Hides one or more ParaView objects by name or reference.
+
+    Takes 2 arguments:
+
+      source_names - List of ParaView source names to hide.
+      object_flag  - Optional flag specifying whether source_names contains names
+                     (False) or object references (True).  If omitted, defaults to False.
+
+    Returns nothing.
+
+    """
+
+    for source_name in source_names:
+        if object_flag:
+            paraview_object = source_name
+        else:
+            paraview_object = pv.FindSource( source_name )
+
+            if paraview_object is None:
+                warnings.warn( "Cannot find an object named '{:s}.  Skipping.'".format(
+                    source_name ) )
+
+        _ = pv.Hide( paraview_object )
+
+    # force a visual update to remove any objects we just hid.
+    pv.Render()
+
+    return
+
+def show( source_names, object_flag=False ):
+    """
+    Shows one or more ParaView objects by name or reference.
+
+    Takes 2 arguments:
+
+      source_names - List of ParaView source names to show.
+      object_flag  - Optional flag specifying whether source_names contains names
+                     (False) or object references (True).  If omitted, defaults to False.
+
+    Returns nothing.
+
+    """
+
+    for source_name in source_names:
+        if object_flag:
+            paraview_object = source_name
+        else:
+            paraview_object = pv.FindSource( source_name )
+
+            if paraview_object is None:
+                warnings.warn( "Cannot find an object named '{:s}.  Skipping.'".format(
+                    source_name ) )
+
+        _ = pv.Show( paraview_object )
+
+    # force a visual update to show any objects we just exposed.
+    pv.Render()
+
+    return
