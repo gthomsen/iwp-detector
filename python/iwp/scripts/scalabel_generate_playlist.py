@@ -21,7 +21,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
     """
 
     usage_str = \
-"""{program_name:s} [-f] [-h] [-l <labels_path>] [-L <labeling_strategy>] <playlist_path> <experiment> <variable>[,<variable>[...]] <time_start>:<time_stop> <z_start>:<z_stop> <data_root> <url_prefix> <component_count>
+"""{program_name:s} [-f] [-h] [-l <path>,<width>,<height>] [-L <labeling_strategy>] <playlist_path> <experiment> <variable>[,<variable>[...]] <time_start>:<time_stop> <z_start>:<z_stop> <data_root> <url_prefix> <component_count>
 
     Creates a JSON playlist suitable for importing into a new Scalabel.ai labeling project
     at <playlist_path>.  The playlist generated contains a sequence of "video frames"
@@ -69,15 +69,17 @@ def print_usage( program_name, file_handle=sys.stdout ):
 
     The command line options shown above are described below:
 
-        -f                        Force creation of the playlist JSON regardless of whether
-                                  the frames' underlying data exists or not.  If a datum
-                                  doesn't exist, a warning is printed to standard error.
-        -h                        Print this help message and exit.
-        -l <labels_path>          Path to serialized IWP labels to incorporate in the created
-                                  playlist.
-        -L <labeling_strategy>    Strategy for sequencing the generated playlist.  Must
-                                  be one of: {no_order:s}, {xy_slices:s}, {z_stacks:s},
-                                  {variables:s}.  See the description above for details.
+        -f                          Force creation of the playlist JSON regardless of whether
+                                    the frames' underlying data exists or not.  If a datum
+                                    doesn't exist, a warning is printed to standard error.
+        -h                          Print this help message and exit.
+        -l <path>,<width>,<height>  Comma-delimited parameters specifying the serialized
+                                    IWP labels to incorporate into the created playlist.
+                                    Labels with normalized coordinates are loaded from
+                                    <path> and are scaled to <width> x <height> pixels.
+        -L <labeling_strategy>      Strategy for sequencing the generated playlist.  Must
+                                    be one of: {no_order:s}, {xy_slices:s}, {z_stacks:s},
+                                    {variables:s}.  See the description above for details.
 """.format(
     program_name=program_name,
     no_order="'{:s}'".format( iwp.scalabel.LabelingStrategyType.NO_ORDER.name.lower() ),
@@ -111,9 +113,13 @@ def parse_command_line( argv ):
                       .force_flag      - Flag specifying whether playlist creation
                                          should be forced.  If omitted, defaults to
                                          False.
-                      .iwp_labels_path - Path to IWP labels to use during playlist
-                                         creation.  If omitted, defaults to None
-                                         specifying no labels are available.
+                      .image_height    - Image height to scale the normalized IWP
+                                         labels to.
+                      .image_width     - Image width to scale the normalized IWP
+                                         labels to.
+                      .iwp_labels_path - Path to normalized IWP labels to use during
+                                         playlist creation.  If omitted, defaults to 
+                                         None specifying no labels are available.
 
                   NOTE: Will be None if execution is not required.
 
@@ -194,7 +200,17 @@ def parse_command_line( argv ):
             print_usage( argv[0] )
             return (None, None)
         elif option == "-l":
-            options.iwp_labels_path = option_value
+            try:
+                (options.iwp_labels_path,
+                 options.image_width,
+                 options.image_height) = option_value.split( "," )
+
+                options.image_width  = int( options.image_width )
+                options.image_height = int( options.image_height )
+            except ValueError as e:
+                raise ValueError( "Failed to parse <path>:<width>:<height> from '{:s}' ({:s}).".format(
+                    option_value,
+                    str( e ) ) )
         elif option == "-L":
             if option_value.upper() in valid_labeling_strategies:
                 options.labeling_strategy = valid_labeling_strategies[option_value.upper()]
@@ -219,13 +235,20 @@ def parse_command_line( argv ):
     arguments.url_prefix      = positional_arguments[ARG_URL_PREFIX]
     arguments.component_count = positional_arguments[ARG_COMPONENT_COUNT]
 
-    # validate the ranges supplied are sensible
+    # validate the ranges supplied are sensible.
     if arguments.time_range is None:
         raise ValueError( "Failed to parse a time range from \"{:s}\"".format(
             positional_arguments[ARG_TIME_RANGE] ) )
     if arguments.xy_slice_range is None:
         raise ValueError( "Failed to parse a xy slice range from \"{:s}\"".format(
             positional_arguments[ARG_XY_SLICE_RANGE] ) )
+
+    # ensure that we're reasonably scaling our labels.
+    if (options.image_width <= 0) or (options.image_height <= 0):
+        raise ValueError( "Label scaling size is invalid.  Cannot scale to "
+                          "{:d} x {:d} pixels.".format(
+                              options.image_width,
+                              options.image_height ) )
 
     # ensure we have a non-negative component count.
     try:
@@ -288,10 +311,35 @@ def main( argv ):
 
         return 1
 
+    # load and scale the labels if provided.
+    if options.iwp_labels_path is not None:
+        try:
+            iwp_labels = iwp.labels.load_iwp_labels( options.iwp_labels_path )
+        except FileNotFoundError as e:
+            print( "Failed to load IWP labels from '{:s}' ({:s}).".format(
+                options.iwp_labels_path,
+                str( e ) ))
+
+            return 1
+
+        # convert from the IWP coordinate system to the Scalabel coordinate
+        # system.  this flips the bottom-left origin to the top-left.
+        iwp.labels.flipud_iwp_label_coordinates( iwp_labels,
+                                                 1.0,
+                                                 in_place_flag=True )
+
+        # scale the labels to match the images we're labeling.
+        iwp.labels.scale_iwp_label_coordinates( iwp_labels,
+                                                options.image_width,
+                                                options.image_height,
+                                                in_place_flag=True )
+    else:
+        iwp_labels = []
+
     # merge the IWP labels into the frames.  this is a no-op if we were not
     # supplied labels by the caller.
     scalabel_frames = iwp.scalabel.set_iwp_labels( scalabel_frames,
-                                                   options.iwp_labels_path )
+                                                   iwp_labels )
 
     # serialize playlist.
     try:

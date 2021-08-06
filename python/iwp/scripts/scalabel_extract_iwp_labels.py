@@ -20,10 +20,11 @@ def print_usage( program_name, file_handle=sys.stdout ):
     """
 
     usage_str = \
-"""{program_name:s} [-h] <playlist_path> <labels_path>
+"""{program_name:s} [-h] <playlist_path> <labels_path> <width> <height>
 
     Extracts IWP labels from a Scalabel.ai playlist, at <playlist_path>, and writes
-    them to disk at <labels_path>.
+    them to disk at <labels_path>.  Using <width> and <height>, IWP labels are normalized
+    from pixel coordinates to [0, 1] prior to serialization.
 
     The command line options shown above are described below:
 
@@ -59,9 +60,12 @@ def parse_command_line( argv ):
       arguments - Object whose attributes represent the positional arguments parsed.
                   Contains at least the following:
 
+                      .image_height           - Height, in pixels, of the image labeled
+                                                with.
+                      .image_width            - Width, in pixels, of the image labeled with.
+                      .iwp_labels_path        - Path to write the extracted IWP labels to.
                       .scalabel_playlist_path - Path to the Scalabel playlist to extract
                                                 IWP labels from.
-                      .iwp_labels_path        - Path to write the extracted IWP labels to.
 
                   NOTE: Will be None if execution is not required.
 
@@ -71,7 +75,9 @@ def parse_command_line( argv ):
     # arguments.
     ARG_SCALABEL_PLAYLIST_PATH = 0
     ARG_IWP_LABELS_PATH        = 1
-    NUMBER_ARGUMENTS           = ARG_IWP_LABELS_PATH + 1
+    ARG_IMAGE_WIDTH            = 2
+    ARG_IMAGE_HEIGHT           = 3
+    NUMBER_ARGUMENTS           = ARG_IMAGE_HEIGHT + 1
 
     # empty class designed to hold name values.
     #
@@ -104,6 +110,8 @@ def parse_command_line( argv ):
     # map the positional arguments to named variables.
     arguments.scalabel_playlist_path = positional_arguments[ARG_SCALABEL_PLAYLIST_PATH]
     arguments.iwp_labels_path        = positional_arguments[ARG_IWP_LABELS_PATH]
+    arguments.image_width            = int( positional_arguments[ARG_IMAGE_WIDTH] )
+    arguments.image_height           = int( positional_arguments[ARG_IMAGE_HEIGHT] )
 
     return options, arguments
 
@@ -150,8 +158,21 @@ def main( argv ):
     # convert the Scalabel labels into IWP labels.
     iwp_labels = iwp.scalabel.extract_iwp_labels_from_frames( scalabel_frames )
 
-    # serialize the labels to disk.
     try:
+        # switch the labels to a bottom-left coordinate system since Scalabel.ai
+        # labels relative to the top-left.
+        iwp.labels.flipud_iwp_label_coordinates( iwp_labels,
+                                                 arguments.image_height,
+                                                 in_place_flag=True )
+
+        # normalize the labels so they're independent of the size of the
+        # image labeled on.
+        iwp.labels.normalize_iwp_label_coordinates( iwp_labels,
+                                                    arguments.image_width,
+                                                    arguments.image_height,
+                                                    in_place_flag=True )
+
+        # serialize the labels to disk.
         iwp.labels.save_iwp_labels( arguments.iwp_labels_path, iwp_labels )
     except Exception as e:
         print( "Failed to write the IWP labels to '{:s}' ({:s}).".format(

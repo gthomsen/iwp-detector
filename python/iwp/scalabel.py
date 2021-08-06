@@ -454,7 +454,7 @@ def extract_iwp_labels_from_frames( scalabel_frames, category_filter=[] ):
 
     return iwp_labels
 
-def set_iwp_labels( scalabel_frames, iwp_labels_path=None ):
+def set_iwp_labels( scalabel_frames, iwp_labels=[] ):
     """
     Replaces the labels in the Scalabel frames with those found in the supplied IWP
     labels path.  A copy of the frames is made so the originals are unaltered.
@@ -463,14 +463,13 @@ def set_iwp_labels( scalabel_frames, iwp_labels_path=None ):
 
       scalabel_frames - List of Scalabel frames.  Each frame is a dictionary describing
                         a single frame within a dataset.
-      iwp_labels_path - Optional path to the IWP labels to set in scalabel_frames.  If
-                        omitted, defaults to None and all labels are removed from
-                        scalabel_frames.
+      iwp_labels      - Optional list of IWP labels to set in scalabel_frames.  If
+                        omitted, defaults to an empty list.
 
     Returns 1 value:
 
       scalabel_frames - Updated list of Scalabel frames.  Each frame's labels are set
-                        to those found in iwp_labels_path.
+                        to those found in iwp_labels.
 
     """
 
@@ -478,13 +477,6 @@ def set_iwp_labels( scalabel_frames, iwp_labels_path=None ):
     # NOTE: we make a deep copy of the frames so we can modify them in place.
     #
     scalabel_frames = copy.deepcopy( scalabel_frames )
-
-    # load the IWP labels if they were supplied.  otherwise we use an empty set
-    # of labels and ultimately remove the Scalabel frames' labels.
-    if iwp_labels_path is not None:
-        iwp_labels = iwp.labels.load_iwp_labels( iwp_labels_path )
-    else:
-        iwp_labels = []
 
     # map from (time step, slice index) to a dictionary containing an identifier
     # ("id") and a list of IWP labels ("labels").  this allows flattening of IWP
