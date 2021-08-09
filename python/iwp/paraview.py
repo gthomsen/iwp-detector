@@ -965,8 +965,8 @@ def create_xyz_labels( iwp_labels, z_coordinates, color=None, keep_points_flag=F
         named_iwp_labels = labels_map[label_identifier]
 
         # convert the labels into matrix of corners, one per label.
-        label_corners = iwp.labels.convert_iwp_bboxes_to_array( named_iwp_labels,
-                                                                z_coordinates )
+        label_corners = iwp.labels.convert_iwp_bboxes_to_corners( named_iwp_labels,
+                                                                  z_coordinates )
 
         # identify the edges of the vertical extent.
         (minimum_z, maximum_z) = (label_corners[:, 2::3].min(),
