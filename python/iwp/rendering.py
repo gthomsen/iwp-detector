@@ -305,9 +305,11 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
         # additional metadata.
         title_text = ""
         if title_flag:
-            title_text = "Nt={:03d}, z={:03d}, {:s}".format( time_step_value,
-                                                             xy_slice_indices[z_index],
-                                                             da.name )
+            title_text = "Nt={:03d}, z={:.2f} ({:03d}), {:s}".format(
+                time_step_value,
+                da.z[z_index].values,
+                xy_slice_indices[z_index],
+                da.name )
 
         # compute local statistics on this slice if they're being normalized
         # independently rather than across an entire dataset.
