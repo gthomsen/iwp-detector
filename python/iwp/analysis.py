@@ -72,7 +72,8 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
         cax_h   = divider.append_axes( "right", size="5%", pad=0.05 )
         plt.colorbar( slice_h, cax=cax_h )
 
-    ax_h.set_title( variable_name )
+    ax_h.set_title( variable_name,
+                    fontweight="bold" )
 
     return slice_h
 
