@@ -5,7 +5,9 @@ import numpy as np
 import os
 from PIL import Image, ImageDraw
 
+import iwp.analysis
 import iwp.statistics
+import iwp.utilities
 
 def array_to_pixels( array, quantization_table, color_map, scaler=1 ):
     """
@@ -47,7 +49,7 @@ def array_to_pixels( array, quantization_table, color_map, scaler=1 ):
 
     return data_pixels
 
-def array_to_image( array, quantization_table, color_map, indexing_type="ij", title_text="" ):
+def array_to_image_PIL( array, quantization_table, color_map, indexing_type="ij", title_text="", **kwargs ):
     """
     Converts a NumPy array to a PIL Image, and optionally burns in a title to
     the top of the image.  The supplied array is quantized and colorized prior
@@ -55,7 +57,7 @@ def array_to_image( array, quantization_table, color_map, indexing_type="ij", ti
 
     Raises ValueError if the requested indexing method is unknown.
 
-    Takes 5 arguments:
+    Takes 6 arguments:
 
       array              - NumPy array of data to convert to pixels.  The data type
                            must be compatible with NumPy's digitize() function.
@@ -69,6 +71,8 @@ def array_to_image( array, quantization_table, color_map, indexing_type="ij", ti
                            "ij" to match IWP visualization conventions.
       title_text         - Optional title string to burn into the generated image.
                            If omitted, the image is created without alteration.
+      kwargs             - Optional keyword arguments dictionary.  Accepted for
+                           compatibility with array_to_image()'s calling convention.
 
     Returns 1 value:
 
@@ -105,6 +109,185 @@ def array_to_image( array, quantization_table, color_map, indexing_type="ij", ti
                    fill=(255, 255, 255, 175) )
 
     return image
+
+def array_to_image_imshow( array, quantization_table, color_map, title_text="", show_axes_labels_flag=True, figure_size=None, colorbar_flag=True, grid_extents=None, indexing_type="ij", **kwargs ):
+    """
+    Takes a NumPy array and creates a Matplotlib figure decorated with title,
+    axes labels, and a colorbar.  The array specified is quantized and colorized
+    prior to rendering with imshow().  The resulting figure is converted into a
+    PIL image.
+
+    Takes 10 arguments:
+
+      array                 - NumPy array of data to convert to pixels.  The data type
+                              must be compatible with NumPy's digitize() function.
+      quantization_table    - Quantization table to apply to array.  Must be compatible
+                              with NumPy's digitize() function.
+      color_map             - Matplotlib color map to apply.
+      title_text            - Optional title string to burn into the generated image.
+                              If omitted, the image is created without alteration.
+      show_axes_labels_flag - Optional flag specifying whether axes labels should be
+                              rendered.  If omitted, defaults to True.
+
+                              NOTE: Axes ticks and tick labels are always rendered,
+                                    this specifies whether the units label is rendered.
+
+      figure_size           - Optional sequence specifying the rendered figure's height
+                              and width.  If specified, must be two values in inches.
+                              If omitted, defaults to (10, 8).
+      colorbar_flag         - Optional flag specifying whether a colorbar should be
+                              rendered to the right of the XY slice.  If omitted,
+                              defaults to True.
+      grid_extents          - Optional sequence specifying the data coordinates of the
+                              XY slice.  Sequence of two sequences, each with a pair
+                              of elements specifying the (min, max) for the X and Y
+                              axes (i.e. (min_x, max_x), (min_y, max_y)).  If omitted,
+                              defaults to None and the XY slice axes are labeled in
+                              indices.
+      indexing_type         - Optional string specifying array's indexing method.  Must
+                              be either "xy" (origin in top left) or "ij" (origin in
+                              bottom left).  See numpy.meshgrid() for a detailed
+                              description of indexing types.  If omitted, defaults to
+                              "ij" to match IWP visualization conventions.
+      kwargs                - Optional keyword arguments dictionary.  Accepted for
+                              compatibility with array_to_image()'s calling convention.
+
+    Returns 1 value:
+
+      image - PIL Image created from array's data.
+
+    """
+
+    # pick a largish default plot size.  if it is too big, callers can specify
+    # something themselves.
+    if figure_size is None:
+        figure_size = (10, 8)
+
+    try:
+        # switch the Agg backend so we can render to an offscreen canvas and
+        # export its contents into a PIL Image.  take care to track the previous
+        # so we can restore it afterwards.  we run into problems when calling
+        # this method interactively and the backend doesn't match if we don't.
+        previous_backend = plt.get_backend()
+        plt.switch_backend( "Agg" )
+
+        # create a single axes subplot.
+        #
+        # NOTE: we use a constrained layout so that we get consistent axes
+        #       layouts when rendering colorbars.  without this we have the
+        #       issue where a colorbar tick label at the top of the bar may
+        #       cause the XY slice and colorbar axes to shift slightly, so
+        #       that a sequence of XY slices jitters around as the value
+        #       ranges change slice-to-slice.
+        #
+        fig_h, ax_h = plt.subplots( 1, 1,
+                                    figsize=figure_size,
+                                    constrained_layout=True )
+
+        #
+        # NOTE: show_xy_slice() already sets the coordinate system to "ij", so
+        #       we need to trick it and flip the input matrix (via an indexing
+        #       view) if "xy" coordinates are requested.
+        #
+        if indexing_type == "xy":
+            array = np.flipud( array )
+
+        # render the figure.
+        image_h = iwp.analysis.show_xy_slice( ax_h,
+                                              array,
+                                              title_text,
+                                              color_map=color_map,
+                                              quantization_table=quantization_table,
+                                              grid_extents=grid_extents,
+                                              colorbar_flag=colorbar_flag )
+
+        # attempt to label our axes correctly.  grid extents specify we have
+        # data coordinates, so we're either in meters or dimensionless units
+        # (normalized by the tow body diameter).  otherwise, we're in indices.
+        #
+        # NOTE: we don't have a way to indicate that our coordinate system is in
+        #       meters (straight from the simulation) or dimensionless (modified
+        #       for analysis), so we attempt to guess based on the domain size.
+        #       for the largest simulations the individual domain extents are at
+        #       least 10D, so guess based on that.
+        #
+        if show_axes_labels_flag:
+            if grid_extents is not None:
+                if ((np.diff( grid_extents[0] ) > 10 or
+                     np.diff( grid_extents[1] ) > 10)):
+                    ax_h.set_xlabel( "x/D",
+                                     fontweight="bold" )
+                    ax_h.set_ylabel( "y/D",
+                                     fontweight="bold" )
+                else:
+                    ax_h.set_xlabel( "x (m)",
+                                     fontweight="bold" )
+                    ax_h.set_ylabel( "y (m)",
+                                     fontweight="bold" )
+            else:
+                ax_h.set_xlabel( "x index",
+                                 fontweight="bold" )
+                ax_h.set_ylabel( "y index",
+                                 fontweight="bold" )
+
+        fig_h.canvas.draw()
+    finally:
+        # ensure that we switch back to the previous backend no matter what.
+        # it would be poor form to suddenly break image plotting in an
+        # interactive session because something went awry before we could
+        # switch back.
+        #
+        # NOTE: if an exception was raised above, this will run before leaving
+        #       this method.
+        #
+        plt.switch_backend( previous_backend )
+
+    # convert the figure's rendering into a PIL image.
+    image = Image.frombytes( "RGB",
+                             fig_h.canvas.get_width_height(),
+                             fig_h.canvas.tostring_rgb() )
+
+    return image
+
+def array_to_image( array, quantization_table, color_map, **kwargs ):
+    """
+    Converts a NumPy array to a PIL Image, either as a raw matrix of pixels or as
+    a decorated Matplotlib figure.  The supplied array is quantized and colorized
+    prior to conversion to a PIL Image.
+
+    Takes 4 arguments:
+
+      array              - NumPy array of data to convert to pixels.  The data type
+                           must be compatible with NumPy's digitize() function.
+      quantization_table - Quantization table to apply to array.  Must be compatible
+                           with NumPy's digitize() function.
+      color_map          - Matplotlib color map to apply.
+      kwargs             - Optional keyword arguments dictionary.  See array_to_image_imshow()
+                           and array_to_image_PIL() for details on arguments not
+                           described below.  Arguments specifically handled:
+
+                             render_figure_flag - Optional flag specifying whether
+                                                  a Matplotlib figure should be created.
+                                                  If omitted, defaults to False and a
+                                                  PIL image is created.
+
+    Returns 1 value:
+
+      image - PIL Image created from array's data.
+
+    """
+
+    # call the appropriate specialization to create the image.
+    if kwargs.get( "render_figure_flag", False ):
+        return array_to_image_imshow( array,
+                                      quantization_table,
+                                      color_map,
+                                      **kwargs )
+    else:
+        return array_to_image_PIL( array,
+                                   quantization_table,
+                                   color_map,
+                                   **kwargs)
 
 def color_map_to_image( color_map, color_limits, orientation="vertical", figsize=None ):
     """
@@ -175,7 +358,7 @@ def color_map_to_image( color_map, color_limits, orientation="vertical", figsize
 
     return colorbar_image
 
-def da_write_single_xy_slice_image( da, output_path, quantization_table, color_map, title_text="", verbose_flag=False ):
+def da_write_single_xy_slice_image( da, output_path, quantization_table, color_map, verbose_flag=False, **kwargs ):
     """
     Functor for creating an on-disk image for a single XY slice of data.  Quantizes
     the XY slice and applies a color map before writing.  The file format used is
@@ -191,12 +374,12 @@ def da_write_single_xy_slice_image( da, output_path, quantization_table, color_m
       quantization_table - Quantization table to apply to array.  Must be compatible
                            with NumPy's digitize() function.
       color_map          - Matplotlib color map to apply.
-      title_text         - Optional title string to burn into the generated image.
-                           If omitted, the image is created without alteration.
       verbose_flag       - Optional boolean specifying whether execution should be
                            verbose.  If specified as True, diagnostic messages are
                            printed to standard output during execution.  If omitted,
                            defaults to False.
+      **kwargs           - Optional keyword arguments dictionary.  See array_to_image()
+                           for details on the arguments supported.
 
     Returns 1 value:
 
@@ -204,10 +387,15 @@ def da_write_single_xy_slice_image( da, output_path, quantization_table, color_m
 
     """
 
+    # get the data coordinate extents for the XY slice.
+    grid_extents = (da.coords["x"].values[[0, -1]],
+                    da.coords["y"].values[[0, -1]])
+
     image = array_to_image( da.values.astype( np.float32 ),
                             quantization_table,
                             color_map,
-                            title_text=title_text )
+                            grid_extents=grid_extents,
+                            **kwargs )
 
     if verbose_flag:
         print( "Writing {:s}".format( output_path ) )
@@ -217,7 +405,7 @@ def da_write_single_xy_slice_image( da, output_path, quantization_table, color_m
 
     return da
 
-def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices, data_limits, color_map, quantization_table_builder, title_flag=True, verbose_flag=False ):
+def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices, data_limits, color_map, quantization_table_builder, title_flag=True, verbose_flag=False, **kwargs ):
     """
     Functor for creating on-disk images for each XY slice of data present in an xarray
     DataArray object.  Iterates across all time steps, variables, and XY slices within
@@ -301,15 +489,26 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
             xy_slice_indices[z_index],
             time_step_value )
 
-        # build a title to burn into the slice so it is recognizable without
-        # additional metadata.
+        # create a title that matches the type of image being rendered.
         title_text = ""
         if title_flag:
-            title_text = "Nt={:03d}, z={:.2f} ({:03d}), {:s}".format(
-                time_step_value,
-                da.z[z_index].values,
-                xy_slice_indices[z_index],
-                da.name )
+            if kwargs.get( "render_figure_flag", False ):
+                # figures have a proper title and can accommodate longer, more
+                # descriptive text.
+                title_text = "{:s}\nNt={:03d}, z={:.2f} ({:03d})".format(
+                    iwp.analysis.variable_name_to_title( da.name ),
+                    time_step_value,
+                    da.z[z_index].values,
+                    xy_slice_indices[z_index] )
+            else:
+                # rendered arrays have limited pixel space (one per element).
+                # build a title to burn into the slice so it is recognizable
+                # without additional metadata.
+                title_text = "{:s} - Nt={:03d}, z={:.2f} ({:03d})".format(
+                    da.name,
+                    time_step_value,
+                    da.z[z_index].values,
+                    xy_slice_indices[z_index] )
 
         # compute local statistics on this slice if they're being normalized
         # independently rather than across an entire dataset.
@@ -323,12 +522,13 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
                                         output_path,
                                         quantization_table,
                                         color_map,
-                                        title_text,
-                                        verbose_flag )
+                                        title_text=title_text,
+                                        verbose_flag=verbose_flag,
+                                        **kwargs )
 
     return da
 
-def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, time_step_indices, xy_slice_indices, data_limits, color_map, quantization_table_builder, work_chunk_size=30, title_flag=True, verbose_flag=False ):
+def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, time_step_indices, xy_slice_indices, data_limits, color_map, quantization_table_builder, work_chunk_size=30, render_figure_flag=False, title_flag=True, verbose_flag=False ):
     """
     Creates on-disk images for each of the XY slices in a subset of the supplied dataset.
     A subset of time, XY slices, and variables are normalized, quantized, and colorized
@@ -346,7 +546,7 @@ def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, 
     Image creation may be done in parallel and is distributed into chunks to avoid
     exhausting system resources.
 
-    Takes 12 arguments:
+    Takes 13 arguments:
 
       ds                         - xarray.Dataset or xarray.DataArray to create XY slice images
                                    from.
@@ -373,10 +573,17 @@ def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, 
 
                                    NOTE: This interface will likely change in the future.
 
+      render_figure_flag         - Optional boolean specifying whether images created should
+                                   be rendered as a Matplotlib figure or as a direct
+                                   translation of each XY slice.  If omitted, defaults to
+                                   False.
       title_flag                 - Optional boolean specifying whether images should have
-                                   slice metadata burned into the image or not, allowing
-                                   for visual identification of the slice when its on-disk
-                                   path is unknown.  If omitted, defaults to True.
+                                   slice metadata used as a title.  For direct translations
+                                   of each XY slice (render_figure_flag == False), this
+                                   title text is burned into the image for easy visual
+                                   identification.  For figure renderings of each XY slice
+                                   (render_figure_flag == True), a figure title is constructed
+                                   instead.  If omitted, defaults to True.
       verbose_flag               - Optional boolean specifying whether execution should be
                                    verbose.  If specified as True, diagnostic messages are
                                    printed to standard output during execution.  If omitted,
@@ -386,12 +593,19 @@ def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, 
 
     """
 
+    # parameters for generating images passed to the slice writing routines.
+    image_parameters = {}
+
     # size up the amount of work we have in the time dimension.
     number_time_steps = len( time_step_indices )
 
     if verbose_flag:
         print( "Rendering XY slices for '{:s}'.".format(
             experiment_name ) )
+
+    # propagate the request to create figures down the stack.
+    if render_figure_flag:
+        image_parameters["render_figure_flag"] = True
 
     # iterate through each of the variables.  this is our outer loop so that
     # data for a single variable is completely rendered before moving to the
@@ -448,6 +662,7 @@ def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, 
                             color_map,
                             quantization_table_builder,
                             title_flag,
-                            verbose_flag) ).compute()
+                            verbose_flag),
+                           image_parameters ).compute()
 
     return
