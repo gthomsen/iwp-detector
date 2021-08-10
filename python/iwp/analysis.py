@@ -6,7 +6,7 @@ import numpy as np
 
 # collection of routines to aide in analyzing IWP data.
 
-def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map=cm.bwr, rotate_flag=False ):
+def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map=cm.bwr, rotate_flag=False, colorbar_flag=True ):
     """
 
     Renders an XY slice via Matplotlib's imshow() and decorates it so it is easily
@@ -14,7 +14,7 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
     name, while the XY slice's extents can be set if supplied.  The image rendered
     follows IWP conventions and has the origin in the lower left.
 
-    Takes 6 arguments:
+    Takes 7 arguments:
 
       ax_h          - Axes handle to supply to imshow().
       slice_data    - 2D NumPy array containing the XY slice data, shaped (Y, X).  If
@@ -30,6 +30,8 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
                       If omitted, defaults to matplotlib.cm.bwr.
       rotate_flag   - Optional flag specifying whether slice_data should be rotated
                       before calling imshow().  If omitted, defaults to False.
+      colorbar_flag - Optional flag specifying whether a colorbar should be added to
+                      the supplied axes or not.  If omitted, defaults to False.
 
     Returns 1 value:
 
@@ -65,9 +67,10 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
                                origin="lower" )
 
     # add a colorbar.
-    divider = make_axes_locatable( ax_h )
-    cax_h   = divider.append_axes( "right", size="5%", pad=0.05 )
-    plt.colorbar( slice_h, cax=cax_h )
+    if colorbar_flag:
+        divider = make_axes_locatable( ax_h )
+        cax_h   = divider.append_axes( "right", size="5%", pad=0.05 )
+        plt.colorbar( slice_h, cax=cax_h )
 
     ax_h.set_title( variable_name )
 
