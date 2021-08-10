@@ -32,7 +32,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
     """
 
     usage_str = \
-"""{program_name:s} [-c <colormap>] [-F] [-h] [-L] [-q <quant_table>] [-S <statistics_path>] [-T] [-t <time_start>:<time_stop>] [-v] [-z <z_start>:<z_stop>] <netcdf_pattern> <output_root> <experiment> <variables>
+"""{program_name:s} [-c <colormap>] [-F] [-h] [-L] [-q <quant_table>] [-S <statistics_path>] [-s <min>:<max>:<std>[,...]] [-T] [-t <time_start>:<time_stop>] [-v] [-z <z_start>:<z_stop>] <netcdf_pattern> <output_root> <experiment> <variables>
 
     Renders subsets of IWP datasets into a tree of PNG images suitable for analysis
     or labeling.  The netCDF4 files at <netcdf_pattern> are read and a subset of time
@@ -74,6 +74,18 @@ def print_usage( program_name, file_handle=sys.stdout ):
                                      into image data.  Must be a valid IWP quantization
                                      table that is found at "iwp.quantization.<quant_table>".
                                      If omitted, defaults to "{quant_table:s}".
+        -s <min>:<max>:<std>[,...]   Use the statistics provided (<min>, <max>, and <std>),
+                                     instead of computing local statistics (-L) or using
+                                     pre-computed statistics (-S).  This is useful for
+                                     cases where the quantization tables available are
+                                     not sufficient to visualize features of interest
+                                     and a more direct approach is required (typically
+                                     in addition to using a linear quantization table).
+                                     Cannot be specified in conjunction with either
+                                     local statistics or pre-computed statistics.  Must
+                                     be specified once per variable in <variables>.
+                                     If omitted, either local or pre-computed statistics
+                                     are used.
         -S <statistics_path>         Specifies pre-computed statistics for the dataset.
                                      Variable statistics contained in <statistics_path>
                                      are used instead of computing them on the fly,
@@ -141,6 +153,10 @@ def parse_command_line( argv ):
                                                   into an image.
                       .slice_index_range        - Range object specifying the
                                                   XY indices to process.
+                      .statistics_override_list - List of triplets, one per variable
+                                                  in arguments.variable_names,
+                                                  specifying variable statistics to
+                                                  use.
                       .time_index_range         - Range object specifying the time
                                                   indices to process.
                       .title_images_flag        - Flag specifying whether metadata
@@ -195,6 +211,7 @@ def parse_command_line( argv ):
     options.quantization_table_name  = DEFAULT_QUANT_TABLE_NAME
     options.render_figure_flag       = False
     options.slice_index_range        = None
+    options.statistics_override_list = []
     options.time_index_range         = None
     options.title_images_flag        = True
     options.variable_statistics_path = None
@@ -202,7 +219,7 @@ def parse_command_line( argv ):
 
     # parse our command line options.
     try:
-        option_flags, positional_arguments = getopt.getopt( argv[1:], "c:FhLq:S:Tt:vz:" )
+        option_flags, positional_arguments = getopt.getopt( argv[1:], "c:FhLq:s:S:Tt:vz:" )
     except getopt.GetoptError as error:
         raise ValueError( "Error processing option: {:s}\n".format( str( error ) ) )
 
@@ -221,6 +238,11 @@ def parse_command_line( argv ):
             options.quantization_table_name = option_value
         elif option == "-S":
             options.variable_statistics_path = option_value
+        elif option == "-s":
+            # this will always return a list of lists, though we validate that
+            # it is numeric and of the right shape below.
+            options.statistics_override_list = list( map( lambda x: x.split( ":" ),
+                                                          option_value.split( "," ) ) )
         elif option == "-T":
             options.title_images_flag = False
         elif option == "-t":
@@ -250,9 +272,57 @@ def parse_command_line( argv ):
     arguments.output_root         = positional_arguments[ARG_OUTPUT_ROOT]
     arguments.variable_names      = positional_arguments[ARG_VARIABLE_NAMES].split( "," )
 
-    #
-    # NOTE: nothing else to validate here.  all options and arguments require
-    #       the dataset to be accessible before they can be validated.
+    # validate that the statistics overrides are well formed: 1) minimum,
+    # maximum, and standard deviation, 2) each quantity is a floating point
+    # value, and 3) each minimum is strictly less than the maximum.
+    for override_index, variable_override in enumerate( options.statistics_override_list ):
+        if len( variable_override ) != 3:
+            raise ValueError( "Statistics override #{:d} does not have a minimum, "
+                              "maximum, and standard deviation.  Instead, received {:d} component{:s}.".format(
+                                  override_index + 1,
+                                  len( variable_override ),
+                                  "" if len( variable_override ) == 1 else "s" ) )
+
+        try:
+            variable_override = list( map( lambda x: float( x ),
+                                           variable_override ) )
+            options.statistics_override_list[override_index] = variable_override
+        except ValueError:
+            raise ValueError( "Failed to convert statistics override #{:d} to "
+                              "floating point values ({}).".format(
+                                  override_index + 1,
+                                  variable_override ) )
+
+        if not (variable_override[0] < variable_override[1]):
+            raise ValueError( "Statistics override #{:d} has a minimum that is "
+                              "not less than its maximum ({:f} >= {:f}).".format(
+                                  override_index + 1,
+                                  variable_override[0],
+                                  variable_override[1] ) )
+
+    # ensure that we have one override per variable rendered.
+    if (len( options.statistics_override_list ) > 0 and
+        len( options.statistics_override_list ) != len( arguments.variable_names )):
+        raise ValueError( "Invalid number of statistics overrides provided.  "
+                          "Expected {:d} but received {:d}.".format(
+                              len( arguments.variable_names ),
+                              len( options.statistics_override_list ) ) )
+
+    # ensure that we were only requested to do one of the three statistics
+    # approaches.
+    statistics_approach_count = 0
+    if options.local_statistics_flag:
+        statistics_approach_count += 1
+    if len( options.statistics_override_list ) > 0:
+        statistics_approach_count += 1
+    if options.variable_statistics_path is not None:
+        statistics_approach_count += 1
+
+    if statistics_approach_count > 1:
+        raise RuntimeError( "Cannot specify more than one of 1) local statistics computation, "
+                            "2) statistics overrides, or 3) pre-computed statistics.  {:d} "
+                            "were requested.".format(
+                                statistics_approach_count ) )
 
     return options, arguments
 
@@ -367,22 +437,27 @@ def main( argv ):
             str( e ) ) )
         return 1
 
-    # compute global statistics for any variable that does not already have
-    # them.  local statistics are computed on the fly for each XY slice
-    # rendered.
+    # handle computing global statistics or using the statistics overrides.
     if not options.local_statistics_flag:
         # handle the case where we did not load statistics from disk.
         if variable_statistics is None:
             variable_statistics = {}
 
-        for variable_name in arguments.variable_names:
-            if variable_name not in variable_statistics:
+        if len( options.statistics_override_list ) > 0:
+            # map the overrides to their variable names.
+            for variable_index, variable_name in enumerate( arguments.variable_names ):
+                variable_statistics[variable_name] = options.statistics_override_list[variable_index]
+        else:
+            # compute global statistics for each variable that doesn't have them
+            # pre-loaded.
+            for variable_name in arguments.variable_names:
+                if variable_name not in variable_statistics:
 
-                if options.verbose_flag:
-                    print( "Computing statistics for '{:s}'.".format(
-                        variable_name ) )
+                    if options.verbose_flag:
+                        print( "Computing statistics for '{:s}'.".format(
+                            variable_name ) )
 
-                variable_statistics[variable_name] = iwp.statistics.compute_statistics( xarray_dataset[variable_name] )
+                    variable_statistics[variable_name] = iwp.statistics.compute_statistics( xarray_dataset[variable_name] )
 
     # render each of the requested XY slices as images.
     iwp.rendering.ds_write_xy_slice_images( xarray_dataset,
