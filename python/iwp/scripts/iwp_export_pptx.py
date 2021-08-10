@@ -47,7 +47,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
     template that is instantiated with each slice's <time_step_index>.  For example,
     the pattern below assumes the dataset is indexed by zero padded, six digit integers:
 
-       /path/to/iwp/data/dataset-{:06d}.nc
+       /path/to/iwp/data/dataset-{{:06d}}.nc
 
     Wildcard patterns are not supported.
 
