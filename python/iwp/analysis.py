@@ -118,3 +118,91 @@ def find_nearest( data, value ):
     value_index = (np.abs( data - value )).argmin()
 
     return data[value_index], value_index
+
+def variable_name_to_title( variable_name ):
+    """
+    Translates a variable name into a title suitable for inclusion in Matplotlib
+    title strings.  Variable names are assumed to be lowercased as found in IWP
+    datasets and titles may include LaTeX markers for mathematical typesetting.
+    Unknown variable names are returned as is.
+
+    Takes 1 argument:
+
+      variable_name - Variable name to translate.
+
+    Returns 1 value:
+
+      variable_title - Translated variable title.
+
+    """
+
+    if variable_name == "divh":
+        return "Horizontal Divergence"
+    elif variable_name == "p":
+        return "Density"
+    elif variable_name == "pprime":
+        return "Density$'$"
+    elif variable_name == "u":
+        return "$velocity_x$"
+    elif variable_name == "uprime":
+        return "$velocity_x'$"
+    elif variable_name == "v":
+        return "$velocity_y$"
+    elif variable_name == "vprime":
+        return "$velocity_y'$"
+    elif variable_name == "w":
+        return "$velocity_z$"
+    elif variable_name == "wprime":
+        return "$velocity_z'$"
+    elif variable_name == "vortx":
+        return "$vorticity_x$"
+    elif variable_name == "vorty":
+        return "$vorticity_y$"
+    elif variable_name == "vortz":
+        return "$vorticity_z$"
+    elif variable_name.startswith( "morlet" ):
+        # Morlet wavelets have an angle preference which is encoded as either
+        # "morlet+-angle", "morlet+angle", or "morlet-angle".  handle the
+        # plus/minus case as special and let the positive/negative, single
+        # angles fall through like normal text.
+
+        variable_title = "2D CWT with Morlet"
+
+        # decorate the base title depending on the format of the rest of the
+        # variable.
+        pm_index = variable_name.find( "+-" )
+        if pm_index != -1:
+            #
+            # NOTE: we have to filter this as the non-default split parameter
+            #       will *not* filter out empty strings...
+            #
+            pieces = list( filter( lambda piece: len( piece ) > 0,
+                                   variable_name[pm_index+2:].split( "-" ) ) )
+
+            # the first piece is the angle.  add the remaining pieces the
+            # way we found them.
+            if len( pieces ) == 1:
+                suffix = ""
+            else:
+                suffix = " ({:s})".format( "-".join( pieces[1:] ) )
+
+            # add "+-N degrees" in LaTeX and then append the remaining
+            # components as a suffix.
+            variable_title = "{:s}$\pm{:s}\circ${:s}".format(
+                variable_title,
+                pieces[0],
+                suffix )
+        elif len( variable_name ) > len( "morlet" ):
+            # add the remaining text as a parenthetical.
+            variable_title = "{:s} ({:s})".format(
+                variable_title,
+                variable_name[len( "morlet" ):] )
+
+        return variable_title
+    elif variable_name.startswith( "arc" ):
+        return "2D CWT with Arc"
+    elif variable_name.startswith( "halo" ):
+        return "2D CWT with Halo"
+
+    # we don't have a special title for this variable.  use what we have.
+    return variable_name
