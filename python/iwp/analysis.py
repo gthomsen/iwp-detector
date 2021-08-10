@@ -1,3 +1,4 @@
+import matplotlib.colors as colors
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -6,7 +7,7 @@ import numpy as np
 
 # collection of routines to aide in analyzing IWP data.
 
-def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map=cm.bwr, rotate_flag=False, colorbar_flag=True ):
+def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map=cm.bwr, quantization_table=None, rotate_flag=False, colorbar_flag=True ):
     """
 
     Renders an XY slice via Matplotlib's imshow() and decorates it so it is easily
@@ -14,24 +15,29 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
     name, while the XY slice's extents can be set if supplied.  The image rendered
     follows IWP conventions and has the origin in the lower left.
 
-    Takes 7 arguments:
+    Takes 8 arguments:
 
-      ax_h          - Axes handle to supply to imshow().
-      slice_data    - 2D NumPy array containing the XY slice data, shaped (Y, X).  If
-                      rotate_flag == True, this is shaped (X, Y).
-      variable_name - String to use as the plot's title describing slice_data.
-      grid_extents  - Optional tuple containing the extents for the X and Y dimensions,
-                      with each entry containing a tuple specifying the (min, max) for
-                      said dimension.  May be specified as either a pair containing
-                      (X, Y) extents or  a triple containing (X, Y, Z) extents.  If
-                      omitted, the plot axes are labeled with slice_data's dimensions.
-      color_map     - Optional Matplotlib colormap to render slice_data with.  May
-                      be specified as anything that imshow()'s cmap argument accepts.
-                      If omitted, defaults to matplotlib.cm.bwr.
-      rotate_flag   - Optional flag specifying whether slice_data should be rotated
-                      before calling imshow().  If omitted, defaults to False.
-      colorbar_flag - Optional flag specifying whether a colorbar should be added to
-                      the supplied axes or not.  If omitted, defaults to False.
+      ax_h               - Axes handle to supply to imshow().
+      slice_data         - 2D NumPy array containing the XY slice data, shaped (Y, X).
+                           If rotate_flag == True, this is shaped (X, Y).
+      variable_name      - String to use as the plot's title describing slice_data.
+      grid_extents       - Optional tuple containing the extents for the X and Y
+                           dimensions, with each entry containing a tuple specifying
+                           the (min, max) for said dimension.  May be specified as
+                           either a pair containing (X, Y) extents or a triple
+                           containing (X, Y, Z) extents.  If omitted, the plot axes
+                           are labeled with slice_data's dimensions.
+      color_map          - Optional Matplotlib colormap to render slice_data with.
+                           May be specified as anything that imshow()'s cmap argument
+                           accepts. If omitted, defaults to matplotlib.cm.bwr.
+      quantization_table - Optional quantization table to apply to slice_data.  Must
+                           be compatible with NumPy's digitize() function.  If omitted,
+                           defaults to None and a linear quantization between slice_data's
+                           minimum and maximum is used.
+      rotate_flag        - Optional flag specifying whether slice_data should be rotated
+                           before calling imshow().  If omitted, defaults to False.
+      colorbar_flag      - Optional flag specifying whether a colorbar should be added
+                           to the supplied axes or not.  If omitted, defaults to True.
 
     Returns 1 value:
 
@@ -54,16 +60,29 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
     if rotate_flag:
         slice_data = slice_data.T
 
+    # provide a mapping of the slice data to [0, 1].  use our quantization
+    # table if we have one, otherwise fall back to linear between the minimum
+    # and maximum.
+    if quantization_table is None:
+        normalizer = colors.Normalize( vmin=slice_data.min(),
+                                       vmax=slice_data.max(),
+                                       clip=True )
+    else:
+        normalizer = colors.BoundaryNorm( boundaries=quantization_table,
+                                          ncolors=quantization_table.shape[0] )
+
     # plot the slice.
     if grid_extents is not None:
         slice_h = ax_h.imshow( slice_data,
                                extent=[grid_x[0], grid_x[-1],
                                        grid_y[0], grid_y[-1]],
                                cmap=color_map,
+                               norm=normalizer,
                                origin="lower" )
     else:
         slice_h = ax_h.imshow( slice_data,
                                cmap=color_map,
+                               norm=normalizer,
                                origin="lower" )
 
     # add a colorbar.
