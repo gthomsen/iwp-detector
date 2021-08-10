@@ -201,7 +201,7 @@ def parse_command_line( argv ):
     try:
         arguments.slice_pairs = list( map( lambda x: tuple( map( lambda y: int( y ), x.split( "," ) ) ),
                                            positional_arguments[ARG_SLICE_PAIRS:] ) )
-    except ValueError as e:
+    except ValueError:
         raise ValueError( "Failed to parse the slice pairs ({:s}).".format(
             " ".join( positional_arguments[ARG_SLICE_PAIRS:] ) ) )
 
