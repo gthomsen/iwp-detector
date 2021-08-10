@@ -32,7 +32,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
     """
 
     usage_str = \
-"""{program_name:s} [-c <colormap>] [-h] [-L] [-q <quant_table>] [-S <statistics_path>] [-T] [-t <time_start>:<time_stop>] [-v] [-z <z_start>:<z_stop>] <netcdf_pattern> <output_root> <experiment> <variables>
+"""{program_name:s} [-c <colormap>] [-F] [-h] [-L] [-q <quant_table>] [-S <statistics_path>] [-T] [-t <time_start>:<time_stop>] [-v] [-z <z_start>:<z_stop>] <netcdf_pattern> <output_root> <experiment> <variables>
 
     Renders subsets of IWP datasets into a tree of PNG images suitable for analysis
     or labeling.  The netCDF4 files at <netcdf_pattern> are read and a subset of time
@@ -61,6 +61,10 @@ def print_usage( program_name, file_handle=sys.stdout ):
                                      the name of a valid Matplotlib colormap that is
                                      found at "matplotlib.cm.<colormap>".  If omitted,
                                      defaults to "{colormap:s}".
+        -F                           Rendered images are decorated Matplotlib figures
+                                     instead of converting XY slices directly.  If
+                                     omitted, XY slices are converted directly.
+                                     of undecorated array visualizations.
         -h                           Print this help message and exit.
         -L                           Render images using local statistics of each XY
                                      slice instead of global statistics across all
@@ -130,6 +134,11 @@ def parse_command_line( argv ):
                                                   used.
                       .quantization_table_name  - String specifying the name of a
                                                   IWP quantization table.
+                      .render_figure_flag       - Flag specifying whether XY slices
+                                                  should be rendered to Matplotlib
+                                                  figures or not.  If False, each
+                                                  XY slice is directly translated
+                                                  into an image.
                       .slice_index_range        - Range object specifying the
                                                   XY indices to process.
                       .time_index_range         - Range object specifying the time
@@ -184,6 +193,7 @@ def parse_command_line( argv ):
     options.colormap_name            = DEFAULT_COLORMAP_NAME
     options.local_statistics_flag    = False
     options.quantization_table_name  = DEFAULT_QUANT_TABLE_NAME
+    options.render_figure_flag       = False
     options.slice_index_range        = None
     options.time_index_range         = None
     options.title_images_flag        = True
@@ -192,7 +202,7 @@ def parse_command_line( argv ):
 
     # parse our command line options.
     try:
-        option_flags, positional_arguments = getopt.getopt( argv[1:], "c:hLq:S:Tt:vz:" )
+        option_flags, positional_arguments = getopt.getopt( argv[1:], "c:FhLq:S:Tt:vz:" )
     except getopt.GetoptError as error:
         raise ValueError( "Error processing option: {:s}\n".format( str( error ) ) )
 
@@ -200,6 +210,8 @@ def parse_command_line( argv ):
     for option, option_value in option_flags:
         if option == "-c":
             options.colormap_name = option_value
+        elif option == "-F":
+            options.render_figure_flag = True
         elif option == "-h":
             print_usage( argv[0] )
             return (None, None)
@@ -382,6 +394,7 @@ def main( argv ):
                                             variable_statistics,
                                             colormap,
                                             quantization_table_builder,
+                                            render_figure_flag=options.render_figure_flag,
                                             title_flag=options.title_images_flag,
                                             verbose_flag=options.verbose_flag ),
 
