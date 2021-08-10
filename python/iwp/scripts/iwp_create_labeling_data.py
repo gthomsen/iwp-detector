@@ -32,7 +32,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
     """
 
     usage_str = \
-"""{program_name:s} [-c <colormap>] [-h] [-L] [-q <quant_table>] [-S <statistics_path>] [-s <z_start>:<z_stop>] [-T] [-t <time_start>:<time_stop>] [-v] <netcdf_pattern> <output_root> <experiment> <variables>
+"""{program_name:s} [-c <colormap>] [-h] [-L] [-q <quant_table>] [-S <statistics_path>] [-T] [-t <time_start>:<time_stop>] [-v] [-z <z_start>:<z_stop>] <netcdf_pattern> <output_root> <experiment> <variables>
 
     Renders subsets of IWP datasets into a tree of PNG images suitable for analysis
     or labeling.  The netCDF4 files at <netcdf_pattern> are read and a subset of time
@@ -75,10 +75,6 @@ def print_usage( program_name, file_handle=sys.stdout ):
                                      are used instead of computing them on the fly,
                                      unless local statistics are requested.  If omitted,
                                      all statistics, local and global, are computed.
-        -s <z_start>:<z_stop>        Specifies a range of XY slice indices to render
-                                     images for.  All XY slices in [<z_start>, <z_stop>]
-                                     must be present in the data found in <netcdf_pattern>.
-                                     If omitted, defaults to all XY slices available.
         -T                           Prevents XY slice titles from being burned into
                                      rendered images.  By default, each XY slice image
                                      has metadata text overlaid to ease identification
@@ -92,6 +88,11 @@ def print_usage( program_name, file_handle=sys.stdout ):
         -v                           Enable verbose execution.  Status messages about
                                      progress are written to standard output.  If
                                      omitted, defaults to normal execution.
+        -z <z_start>:<z_stop>        Specifies a range of XY slice indices to render
+                                     images for.  All XY slices in [<z_start>, <z_stop>]
+                                     must be present in the data found in <netcdf_pattern>.
+                                     If omitted, defaults to all XY slices available.
+
 """.format(
     program_name=program_name,
     colormap=DEFAULT_COLORMAP_NAME,
@@ -191,7 +192,7 @@ def parse_command_line( argv ):
 
     # parse our command line options.
     try:
-        option_flags, positional_arguments = getopt.getopt( argv[1:], "c:hLq:S:s:Tt:v" )
+        option_flags, positional_arguments = getopt.getopt( argv[1:], "c:hLq:S:Tt:vz:" )
     except getopt.GetoptError as error:
         raise ValueError( "Error processing option: {:s}\n".format( str( error ) ) )
 
@@ -208,12 +209,6 @@ def parse_command_line( argv ):
             options.quantization_table_name = option_value
         elif option == "-S":
             options.variable_statistics_path = option_value
-        elif option == "-s":
-            options.slice_index_range = iwp.utilities.parse_range( option_value )
-
-            if options.slice_index_range is None:
-                raise ValueError( "Invalid XY slice range specified ({:s}).".format(
-                    option_value ) )
         elif option == "-T":
             options.title_images_flag = False
         elif option == "-t":
@@ -224,6 +219,12 @@ def parse_command_line( argv ):
                     option_value ) )
         elif option == "-v":
             options.verbose_flag = True
+        elif option == "-z":
+            options.slice_index_range = iwp.utilities.parse_range( option_value )
+
+            if options.slice_index_range is None:
+                raise ValueError( "Invalid XY slice range specified ({:s}).".format(
+                    option_value ) )
 
     # ensure we have the correct number of arguments.
     if len( positional_arguments ) != NUMBER_ARGUMENTS:
