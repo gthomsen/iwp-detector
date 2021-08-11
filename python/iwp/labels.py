@@ -528,7 +528,7 @@ def filter_iwp_labels( iwp_labels, time_range=[], z_range=[], identifiers=[] ):
         # run the gauntlet of the filters.  only keep the labels that match
         # all of the provided constraints.
         if ((len( time_range ) == 2) and
-            not (time_range[0] <= iwp_label["time_index"] <= time_range[1])):
+            not (time_range[0] <= iwp_label["time_step_index"] <= time_range[1])):
             continue
         elif ((len( z_range ) == 2) and
             not (z_range[0] <= iwp_label["z_index"] <= z_range[1])):
