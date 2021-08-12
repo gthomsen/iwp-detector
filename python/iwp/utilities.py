@@ -1,6 +1,24 @@
+import enum
 import xarray
 
 import iwp.data_loader
+
+# enumeration of color system types.  not all color systems are equal and both
+# Matplotlib and PIL do their own things.  some portions (e.g. named colors and
+# hex codes) overlap, though the distinct portions are large enough to require
+# knowing where they come from so they can be properly validated.
+#
+#   matplotlib  - color specifications adhere to the "Matplotlib Specifying Colors"
+#                 documentation found here:
+#
+#                    https://matplotlib.org/stable/tutorials/colors/colors.html
+#
+#   pil         - color specifications adhere to PIL.ImageColor's implementation.
+#                 see that class' documentation for details.
+@enum.unique
+class ColorSystemType( enum.Enum ):
+    MATPLOTLIB = 0
+    PIL        = 1
 
 def parse_range( range_string ):
     """
@@ -153,3 +171,143 @@ def lookup_module_function( module_reference, function_name ):
                                   None )
 
     return function_reference
+
+def _normalize_iwp_color_like( color_like ):
+    """
+    Normalizes an IWP string color specification into a RGB(A) tuple.  Accepts
+    colon-delimited strings specifying either integrals values in the range of [0, 255]
+    or floating point values in the range of [0, 1] and returns a tuple of integer
+    RGB(A) values in the range of [0, 255].
+
+    Raises ValueError when the supplied color specification does not represent an RGB
+    or RGBA value.
+
+    Takes 1 value:
+
+      color_like - Colon-delimited string of numeric values, in the range of [0, 255],
+                   representing a color.  Must contain either three or four components
+                   to specify a color via RGB or RGBA, respectively.
+
+    Returns 1 value:
+
+      normalized_color_like - Tuple, with either three or four integer components (RGB
+                              and RGBA, respectively), representing color_like.
+
+    """
+
+    # check to see if we got a RGB(A) triplet.
+    try:
+        color_components = tuple( map( lambda x: float( x ),
+                                       color_like.split( ":" ) ) )
+    except:
+        raise ValueError( "'{:s}' is not a colon delimited list of numeric values.".format(
+            color_like ) )
+
+    # ensure that we are either RGB or RGBA.
+    if (len( color_components ) < 3) or (len( color_components ) > 4):
+        raise ValueError( "'{:s}' does not look like a RGB(A) tuple.  Expected 3 "
+                          "or 4 components, but received {:d}.".format(
+                              color_like,
+                              len( color_components ) ) )
+
+    # ensure each of the values are at least in [0, 255].
+    if any( map( lambda x: (x < 0) or (x > 255), color_components ) ):
+        raise ValueError( "'{:s}' does not look like a valid RGB(A) tuple.  "
+                          "One or more of the components are outside of [0, 255].".format(
+                              color_like ) )
+
+    # translate floating point values to uint8 by scaling from [0, 1] to
+    # [0, 255].
+    if all( map( lambda x: (x >= 0.) and (x <= 1.0), color_components ) ):
+        normalized_color_like = tuple( map( lambda x: int( x * 255.0 ), color_components ) )
+    else:
+        # warn about any floating point values in [0, 255] while helping the
+        # caller get integral values in the range.
+        if any( map( lambda x: x != float( int( x ) ), color_components ) ):
+            import warnings
+            warnings.warn( "'{:s}' is a non-integral, floating point RGB(A) tuple in [0, 255].  "
+                           "Fixing for PIL-compatibility.".format(
+                               color_like ) )
+
+        # map everything back to integers for PIL compatibility.
+        normalized_color_like = tuple( map( lambda x: int( x ), color_components ) )
+
+    return normalized_color_like
+
+def normalize_color_like( color_like, validator_type ):
+    """
+    Normalizes a color-like string specification into its RGB(A) values.  Colors
+    are validated and converted according to first the requested system
+    (e.g. Matplotlib or PIL) and then against the IWP system as a fall back.
+    This allows colors to be specified in a myriad of ways (e.g. "red", "#ff0000",
+    "r") according to the larger system, but also specified in a command-line friendly,
+    colon-separated list of values for IWP.
+
+    Raises ValueError when the supplied color specification does not represent an
+    RGBA(A) value either in the requested color system or IWP.
+
+    Takes 2 arguments:
+
+      color_like     - matplotlib color spec, PIL color spec, or colon-delimited
+      validator_type - Enumeration of type iwp.utilities.ColorSystemType that specifies
+                       which color system to validate color_like against.
+
+    Returns 1 value:
+
+      normalized_color_like - Tuple, with either three or four components (RGB and
+                              RGBA, respectively), representing color_like.  Components
+                              will be in the range of [0, 255] if validator_type is
+                              PIL, otherwise in the range of [0, 1].
+
+    """
+
+    # ensure we have a known color system.
+    if ((validator_type != ColorSystemType.MATPLOTLIB) and
+        (validator_type != ColorSystemType.PIL)):
+        raise ValueError( "Unknown color system specified ({}).".format(
+            validator_type ) )
+
+    # are we validating against Matplotlib's colors?
+    if validator_type == ColorSystemType.MATPLOTLIB:
+        import matplotlib.colors
+
+        # see if the color is a string based color (e.g. "#ff0000", "r", "red",
+        # "xkcd:red", etc - see 'Matplotlib Specifying Colors" for more
+        # details).
+        if matplotlib.colors.is_color_like( color_like ):
+            normalized_color_like = matplotlib.colors.to_rgba( color_like )
+        else:
+            # fall back and see if we got an IWP color specification.
+            try:
+                normalized_color_like = _normalize_iwp_color_like( color_like )
+
+                # map back to [0, 1] to keep Matplotlib happy.
+                normalized_color_like = tuple( map( lambda x: x / 255.0,
+                                                    normalized_color_like ) )
+            except ValueError as e:
+                raise ValueError( "'{:s}' is neither a Matplotlib nor IWP color specification ({:s}).".format(
+                    color_like,
+                    str( e ) ) )
+
+        return normalized_color_like
+
+    # or are we validating against PIL's colors?
+    if validator_type == ColorSystemType.PIL:
+        import PIL.ImageColor
+
+        try:
+            # see if the color is a string-based color (e.g. "red", "#ff0000",
+            # "rgb( 127, 127, 127 )", "hsv( 128, 90%, 40%)", etc - see
+            # PIL.ImageColor for more details).
+            normalized_color_like = PIL.ImageColor.getrgb( color_like )
+        except:
+            # fall back and see if we got an IWP color specification.
+            try:
+                normalized_color_like = _normalize_iwp_color_like( color_like )
+            except ValueError as e:
+                raise ValueError( "'{:s}' is neither a PIL nor IWP color specification ({:s}).".format(
+                    color_like,
+                    str( e ) ) )
+
+        # we've got something that is PIL-compatible.  return it to the caller.
+        return normalized_color_like
