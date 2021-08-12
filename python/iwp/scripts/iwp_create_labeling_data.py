@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import getopt
+import os
 import sys
 
 import matplotlib.cm
 
 import iwp.data_loader
+import iwp.labels
 import iwp.quantization
 import iwp.rendering
 import iwp.statistics
@@ -17,6 +19,10 @@ DEFAULT_COLORMAP_NAME    = "viridis"
 
 # emphasize the 95th percentile of data by default.
 DEFAULT_QUANT_TABLE_NAME = "build_two_sigma_quantization_table"
+
+# magenta is a high contrast color relative to most colormaps used (viridis,
+# bwr, seismic, inferno, etc).
+DEFAULT_LABEL_COLOR = (1.0, 0.0, 1.0)
 
 def print_usage( program_name, file_handle=sys.stdout ):
     """
@@ -32,7 +38,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
     """
 
     usage_str = \
-"""{program_name:s} [-c <colormap>] [-F] [-h] [-L] [-q <quant_table>] [-S <statistics_path>] [-s <min>:<max>:<std>[,...]] [-T] [-t <time_start>:<time_stop>] [-v] [-z <z_start>:<z_stop>] <netcdf_pattern> <output_root> <experiment> <variables>
+"""{program_name:s} [-c <colormap>] [-F] [-h] [-L] [-l <labels_path>[,<color>]] [-q <quant_table>] [-S <statistics_path>] [-s <min>:<max>:<std>[,...]] [-T] [-t <time_start>:<time_stop>] [-v] [-z <z_start>:<z_stop>] <netcdf_pattern> <output_root> <experiment> <variables>
 
     Renders subsets of IWP datasets into a tree of PNG images suitable for analysis
     or labeling.  The netCDF4 files at <netcdf_pattern> are read and a subset of time
@@ -70,6 +76,11 @@ def print_usage( program_name, file_handle=sys.stdout ):
                                      slice instead of global statistics across all
                                      XY slices for a given variable. If omitted,
                                      global statistics are used.
+        -l <labels_path>[,<color>]   Path to IWP labels to overlay on the images
+                                     rendered.  Optional <color> to create the labels'
+                                     bounding boxes with.  <color> may be specified
+                                     If both are omitted, no
+                                     labels are overlaid.  If <color
         -q <quant_table>             Use <quant_table> for quantizing XY slice data
                                      into image data.  Must be a valid IWP quantization
                                      table that is found at "iwp.quantization.<quant_table>".
@@ -139,6 +150,17 @@ def parse_command_line( argv ):
 
                       .colormap_name            - String specifying the name of a
                                                   Matplotlib colormap.
+                      .iwp_labels_path          - Path to IWP labels to overlay on
+                                                  rendered images.  None if a labels
+                                                  file was not specified.
+                      .label_color              - Sequence specifying an RGB(A) color
+                                                  for overlaid labels.  Will have
+                                                  either three or four components (for
+                                                  RGB and RGBA, respectively) in the
+                                                  range of [0, 255] or [0.0, 1.0]
+                                                  (for PIL- and Matplotlib-rendered
+                                                  images, respectively - see
+                                                  .render_figure_flag).
                       .local_statistics_flag    - Flag specifying whether variable
                                                   statistics are computed per-XY
                                                   slice or across all XY slices.
@@ -207,6 +229,8 @@ def parse_command_line( argv ):
     # metadata titles are burned into images generated and statistics are
     # computed globally prior to rendering images.
     options.colormap_name            = DEFAULT_COLORMAP_NAME
+    options.iwp_labels_path          = None
+    options.label_color              = DEFAULT_LABEL_COLOR
     options.local_statistics_flag    = False
     options.quantization_table_name  = DEFAULT_QUANT_TABLE_NAME
     options.render_figure_flag       = False
@@ -219,7 +243,7 @@ def parse_command_line( argv ):
 
     # parse our command line options.
     try:
-        option_flags, positional_arguments = getopt.getopt( argv[1:], "c:FhLq:s:S:Tt:vz:" )
+        option_flags, positional_arguments = getopt.getopt( argv[1:], "c:Fhl:Lq:s:S:Tt:vz:" )
     except getopt.GetoptError as error:
         raise ValueError( "Error processing option: {:s}\n".format( str( error ) ) )
 
@@ -234,6 +258,19 @@ def parse_command_line( argv ):
             return (None, None)
         elif option == "-L":
             options.local_statistics_flag = True
+        elif option == "-l":
+            option_components = option_value.split( "," )
+
+            # deal with the fact that we take the default color if only a label
+            # path was provided.
+            if len( option_components ) == 1:
+                options.iwp_labels_path = option_components[0]
+            elif len( option_components ) == 2:
+                options.iwp_labels_path = option_components[0]
+                options.label_color     = option_components[1]
+            else:
+                raise ValueError( "Invalid label specification received ({:s}).".format(
+                    option_value ) )
         elif option == "-q":
             options.quantization_table_name = option_value
         elif option == "-S":
@@ -324,6 +361,30 @@ def parse_command_line( argv ):
                             "were requested.".format(
                                 statistics_approach_count ) )
 
+    # ensure that labels exist if we're overlaying them.
+    if ((options.iwp_labels_path is not None) and
+        not os.path.isfile( options.iwp_labels_path )):
+        raise ValueError( "Label overlay was requested with labels in '{:s}' but "
+                          "it does not exist.".format(
+                          options.iwp_labels_path ) )
+
+    # attempt to validate the color specification was correct based on how
+    # we're rendering the XY slices.  PIL and Matplotlib allow different
+    # color specifications, so we try and find invalid ones up front rather
+    # than at the bottom of a 45+ deep call stack.
+    if options.render_figure_flag:
+        validator_type = iwp.utilities.ColorSystemType.MATPLOTLIB
+    else:
+        validator_type = iwp.utilities.ColorSystemType.PIL
+
+    try:
+        options.label_color = iwp.utilities.normalize_color_like( options.label_color,
+                                                                  validator_type )
+    except ValueError as e:
+        raise ValueError( "Invalid {:s} color specification provided ({:s}).".format(
+            "Matplotlib" if options.render_figure_flag else "PIL",
+            options.label_color ) )
+
     return options, arguments
 
 def main( argv ):
@@ -408,6 +469,23 @@ def main( argv ):
                file=sys.stderr )
         return 1
 
+    # acquire the IWP labels.
+    iwp_labels = []
+    if options.iwp_labels_path is not None:
+        try:
+            iwp_labels = iwp.labels.load_iwp_labels( options.iwp_labels_path )
+
+            if options.verbose_flag:
+                print( "Loaded {:d} label{:s}.".format(
+                    len( iwp_labels ),
+                    "" if len( iwp_labels ) == 1 else "s" ) )
+        except Exception as e:
+            print( "Failed to load IWP labels from '{:s}' ({:s}).".format(
+                options.iwp_labels_path,
+                str( e ) ),
+                   file=sys.stderr )
+            return 1
+
     # open the dataset.
     try:
         xarray_dataset = iwp.data_loader.open_xarray_dataset( arguments.netcdf_path_pattern )
@@ -471,6 +549,8 @@ def main( argv ):
                                             quantization_table_builder,
                                             render_figure_flag=options.render_figure_flag,
                                             title_flag=options.title_images_flag,
+                                            iwp_labels=iwp_labels,
+                                            label_color=options.label_color,
                                             verbose_flag=options.verbose_flag ),
 
     # we don't have a return code from the rendering, so assume if we got here

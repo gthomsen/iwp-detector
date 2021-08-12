@@ -1,3 +1,4 @@
+import copy
 import io
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -554,6 +555,12 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
         quantization_table = quantization_table_builder( number_table_entries,
                                                          *data_limits )
 
+    # make a shallow copy of our keyword arguments so we can update the labels
+    # for each slice.  currently we have all IWP labels, though each individual
+    # XY slice should only see the labels that pertain to that time and
+    # location.
+    local_kwargs = copy.copy( kwargs )
+
     # walk through slices in this data array and create an image for each.
     #
     # NOTE: we may be operating on a subset of a larger volume so the Z indices
@@ -596,6 +603,14 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
             quantization_table = quantization_table_builder( number_table_entries,
                                                              *local_data_limits )
 
+        # filter labels down to just this XY slice so we don't see *every* label
+        # on this rendering.
+        local_kwargs["iwp_labels"] = iwp.labels.filter_iwp_labels( kwargs.get( "iwp_labels", [] ),
+                                                                   time_range=[time_step_value,
+                                                                               time_step_value],
+                                                                   z_range=[xy_slice_indices[z_index],
+                                                                            xy_slice_indices[z_index]] )
+
         # image this slice.
         da_write_single_xy_slice_image( da[0, z_index, :],
                                         output_path,
@@ -603,11 +618,11 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
                                         color_map,
                                         title_text=title_text,
                                         verbose_flag=verbose_flag,
-                                        **kwargs )
+                                        **local_kwargs )
 
     return da
 
-def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, time_step_indices, xy_slice_indices, data_limits, color_map, quantization_table_builder, work_chunk_size=30, render_figure_flag=False, title_flag=True, verbose_flag=False ):
+def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, time_step_indices, xy_slice_indices, data_limits, color_map, quantization_table_builder, work_chunk_size=30, render_figure_flag=False, title_flag=True, iwp_labels=[], label_color=None, verbose_flag=False ):
     """
     Creates on-disk images for each of the XY slices in a subset of the supplied dataset.
     A subset of time, XY slices, and variables are normalized, quantized, and colorized
@@ -625,7 +640,7 @@ def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, 
     Image creation may be done in parallel and is distributed into chunks to avoid
     exhausting system resources.
 
-    Takes 13 arguments:
+    Takes 15 arguments:
 
       ds                         - xarray.Dataset or xarray.DataArray to create XY slice images
                                    from.
@@ -663,6 +678,15 @@ def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, 
                                    identification.  For figure renderings of each XY slice
                                    (render_figure_flag == True), a figure title is constructed
                                    instead.  If omitted, defaults to True.
+      iwp_labels                 - Optional list of IWP labels to overlay.  If omitted, defaults
+                                   to an empty list and nothing is overlaid.
+      label_color                - Optional label color.  May be a color string (by English
+                                   name, by Matplotlib or PIL code, by hex, etc) or a color
+                                   tuple (RGB or RGBA), though must be specified to match
+                                   the rendering mode requested (i.e. Matplotlib-compatible
+                                   when render_figure_flag is True). If omitted, defaults to
+                                   a high contrast color tuple suitable for any rendering
+                                   mode.
       verbose_flag               - Optional boolean specifying whether execution should be
                                    verbose.  If specified as True, diagnostic messages are
                                    printed to standard output during execution.  If omitted,
@@ -685,6 +709,10 @@ def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, 
     # propagate the request to create figures down the stack.
     if render_figure_flag:
         image_parameters["render_figure_flag"] = True
+
+    if len( iwp_labels ) > 0:
+        image_parameters["iwp_labels"]  = iwp_labels
+        image_parameters["label_color"] = label_color
 
     # iterate through each of the variables.  this is our outer loop so that
     # data for a single variable is completely rendered before moving to the
