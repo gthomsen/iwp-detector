@@ -6,6 +6,7 @@ import os
 from PIL import Image, ImageDraw
 
 import iwp.analysis
+import iwp.labels
 import iwp.statistics
 import iwp.utilities
 
@@ -49,7 +50,7 @@ def array_to_pixels( array, quantization_table, color_map, scaler=1 ):
 
     return data_pixels
 
-def array_to_image_PIL( array, quantization_table, color_map, indexing_type="ij", title_text="", **kwargs ):
+def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], label_color=None, indexing_type="ij", title_text="", **kwargs ):
     """
     Converts a NumPy array to a PIL Image, and optionally burns in a title to
     the top of the image.  The supplied array is quantized and colorized prior
@@ -57,13 +58,20 @@ def array_to_image_PIL( array, quantization_table, color_map, indexing_type="ij"
 
     Raises ValueError if the requested indexing method is unknown.
 
-    Takes 6 arguments:
+    Takes 8 arguments:
 
       array              - NumPy array of data to convert to pixels.  The data type
                            must be compatible with NumPy's digitize() function.
       quantization_table - Quantization table to apply to array.  Must be compatible
                            with NumPy's digitize() function.
       color_map          - Matplotlib color map to apply.
+      iwp_labels         - Optional list of IWP labels to overlay.  If omitted, defaults
+                           to an empty list and nothing is overlaid.
+      label_color        - Optional PIL-compatible label color.  May be a color string
+                           (by name, by hex, etc) or a color tuple (RGB or RGBA).
+                           Color tuples may be normalized color values (in [0, 1]),
+                           even though they're not natively supported by PIL.  If
+                           omitted, defaults to a high contrast color.
       indexing_type      - Optional string specifying array's indexing method.  Must
                            be either "xy" (origin in top left) or "ij" (origin in
                            bottom left).  See numpy.meshgrid() for a detailed
@@ -79,6 +87,12 @@ def array_to_image_PIL( array, quantization_table, color_map, indexing_type="ij"
       image - PIL Image created from array's data.
 
     """
+
+    # if the caller doesn't have a preference, render labels as opaque magenta.
+    # this has a high likelihood of having high contrast relative to the
+    # underlying color map.
+    if label_color is None:
+        label_color = (255, 0, 255, 255)
 
     # map our data array to 8-bit integers with a colormap applied.
     #
@@ -101,23 +115,80 @@ def array_to_image_PIL( array, quantization_table, color_map, indexing_type="ij"
                           "Must be either 'xy' or 'ij'.".format(
             indexing_type ) )
 
-    # burn in a title if requested.
-    if len( title_text ) > 0:
+    # titles and labels share the same machinery for overlaying themselves onto
+    # the pixels we just rendered.
+    if (len( title_text ) > 0 or len( iwp_labels ) > 0):
         draw = ImageDraw.Draw( image )
-        draw.text( (5, 5),
-                   title_text,
-                   fill=(255, 255, 255, 175) )
+
+        # burn in a title if requested.
+        if len( title_text ) > 0:
+            draw.text( (5, 5),
+                       title_text,
+                       fill=(255, 255, 255, 175) )
+
+        if len( iwp_labels ) > 0:
+            # PIL does not support normalized colors.  attempt scale a
+            # normalized color (each component in [0, 1]) into an 8-bit unsigned
+            # integer (each component in [0, 255]).
+            if all( map( lambda x: type( x ) == float and (0.0 <= x <= 1.0), label_color ) ):
+                label_color = tuple( map( lambda x: int( 255 * x ), label_color ) )
+
+            # flip our labels above the horizontal line if the output image does
+            # not have the same coordinate system as the IWP labels.
+            if indexing_type == "xy":
+                iwp_labels = iwp.labels.flipud_iwp_label_coordinates( iwp_labels,
+                                                                      array.shape[0],
+                                                                      in_place_flag=False )
+
+            # map the IWP labels from normalized coordinates to pixel
+            # coordinates.
+            #
+            # NOTE: we make a copy of the labels to avoid altering our caller's
+            #       state.  we *could* combine this with the xy case's in place
+            #       but it is a) not a common use case and b) the number of
+            #       labels per image are small so we make a duplicate copy.
+            #
+            #       the amount of time it took to write this comment will far
+            #       outweigh the time saved by minimizing the memory footprint.
+            #
+            iwp_labels = iwp.labels.scale_iwp_label_coordinates( iwp_labels,
+                                                                 array.shape[1],
+                                                                 array.shape[0],
+                                                                 in_place_flag=False )
+
+            for iwp_label in iwp_labels:
+                # overlay the label outline.
+                draw.rectangle( ((iwp_label["bbox"]["x1"], iwp_label["bbox"]["y1"]),
+                                 (iwp_label["bbox"]["x2"], iwp_label["bbox"]["y2"])),
+                                outline=label_color )
+
+                # overlay the label name (1st six characters) so that it is
+                # slightly above the top of each label's upper left corner.
+                # take care such that the name is always visible even if the
+                # label is at the top of the image (the name is moved inside the
+                # label in that case).
+                #
+                # NOTE: the hardcoded 12 below accounts for the default PIL font
+                #       size on my system (8-10 points?) and leaves 3 pixels
+                #       between the bottom of the label name and the label's top
+                #       edge.  this is incredibly brittle, but it's not worth
+                #       the energy to do this correctly right now.
+                #
+                draw.text( (iwp_label["bbox"]["x1"],
+                            max( iwp_label["bbox"]["y1"] - 12, 2 )),
+                           "{:s}".format( iwp_label["id"][:6] ),
+                           fill=label_color )
 
     return image
 
-def array_to_image_imshow( array, quantization_table, color_map, title_text="", show_axes_labels_flag=True, figure_size=None, colorbar_flag=True, grid_extents=None, indexing_type="ij", **kwargs ):
+def array_to_image_imshow( array, quantization_table, color_map, title_text="", show_axes_labels_flag=True, iwp_labels=[], label_color=None, figure_size=None, colorbar_flag=True, grid_extents=None, indexing_type="ij", **kwargs ):
     """
     Takes a NumPy array and creates a Matplotlib figure decorated with title,
     axes labels, and a colorbar.  The array specified is quantized and colorized
     prior to rendering with imshow().  The resulting figure is converted into a
     PIL image.
 
-    Takes 10 arguments:
+    Takes 12 arguments:
 
       array                 - NumPy array of data to convert to pixels.  The data type
                               must be compatible with NumPy's digitize() function.
@@ -132,6 +203,12 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
                               NOTE: Axes ticks and tick labels are always rendered,
                                     this specifies whether the units label is rendered.
 
+      iwp_labels            - Optional list of IWP labels to overlay.  If omitted, defaults
+                              to an empty list and nothing is overlaid.
+      label_color           - Optional Matplotlib-compatible label color.  May be a
+                              color string (by English name, by Matplotlib code, by hex,
+                              etc) or a color tuple (RGB or RGBA).  If omitted, defaults
+                              to a high contrast color.
       figure_size           - Optional sequence specifying the rendered figure's height
                               and width.  If specified, must be two values in inches.
                               If omitted, defaults to (10, 8).
@@ -199,6 +276,8 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
                                               color_map=color_map,
                                               quantization_table=quantization_table,
                                               grid_extents=grid_extents,
+                                              iwp_labels=iwp_labels,
+                                              label_color=label_color,
                                               colorbar_flag=colorbar_flag )
 
         # attempt to label our axes correctly.  grid extents specify we have
