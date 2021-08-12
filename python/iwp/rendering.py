@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 import os
-from PIL import Image, ImageDraw
+import PIL.Image
+import PIL.ImageDraw
 
 import iwp.analysis
 import iwp.labels
@@ -108,9 +109,9 @@ def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], lab
     # render the image into a 4-byte per pixel image.  ensure that the origin
     # is placed correctly.
     if indexing_type == "xy":
-        image = Image.fromarray( pixels, "RGBA" )
+        image = PIL.Image.fromarray( pixels, "RGBA" )
     elif indexing_type == "ij":
-        image = Image.fromarray( np.flipud( pixels ), "RGBA" )
+        image = PIL.Image.fromarray( np.flipud( pixels ), "RGBA" )
     else:
         raise ValueError( "Unknown indexing type requested ('{:s}').  "
                           "Must be either 'xy' or 'ij'.".format(
@@ -119,7 +120,7 @@ def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], lab
     # titles and labels share the same machinery for overlaying themselves onto
     # the pixels we just rendered.
     if (len( title_text ) > 0 or len( iwp_labels ) > 0):
-        draw = ImageDraw.Draw( image )
+        draw = PIL.ImageDraw.Draw( image )
 
         # burn in a title if requested.
         if len( title_text ) > 0:
@@ -323,9 +324,9 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
         plt.switch_backend( previous_backend )
 
     # convert the figure's rendering into a PIL image.
-    image = Image.frombytes( "RGB",
-                             fig_h.canvas.get_width_height(),
-                             fig_h.canvas.tostring_rgb() )
+    image = PIL.Image.frombytes( "RGB",
+                                 fig_h.canvas.get_width_height(),
+                                 fig_h.canvas.tostring_rgb() )
 
     return image
 
