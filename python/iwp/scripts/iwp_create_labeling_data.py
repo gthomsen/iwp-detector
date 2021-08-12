@@ -79,8 +79,9 @@ def print_usage( program_name, file_handle=sys.stdout ):
         -l <labels_path>[,<color>]   Path to IWP labels to overlay on the images
                                      rendered.  Optional <color> to create the labels'
                                      bounding boxes with.  <color> may be specified
-                                     If both are omitted, no
-                                     labels are overlaid.  If <color
+                                     If both are omitted, no labels are overlaid.  If
+                                     <color> is omitted, a high contrast default is
+                                     selected.
         -q <quant_table>             Use <quant_table> for quantizing XY slice data
                                      into image data.  Must be a valid IWP quantization
                                      table that is found at "iwp.quantization.<quant_table>".
