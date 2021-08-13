@@ -24,6 +24,95 @@ DEFAULT_QUANT_TABLE_NAME = "build_two_sigma_quantization_table"
 # bwr, seismic, inferno, etc).
 DEFAULT_LABEL_COLOR = (1.0, 0.0, 1.0)
 
+def _get_dask_cluster_manager( cluster_address, cluster_parameters ):
+    """
+    Acquires a Dask cluster context manager from the supplied parameters.  This
+    either connects to an existing cluster or starts a new local cluster.  The
+    returned context manager releases its resources (either disconnecting, or
+    tearing down the local cluster) when its context has exited.
+
+    If neither a existing cluster address nor a local cluster's parameters are
+    supplied, a null context manager is returned.
+
+    Takes 2 arguments:
+
+      cluster_address    - URI to an existing Dask cluster.  May be specified as None
+                           if a local cluster is to be created from cluster_parameters.
+      cluster_parameters - Tuple comprised of three elements specifying parameters
+                           to start a local Dask cluster.  The parameters provided
+                           are as follows:
+
+                             1. number_workers     Integral number of worker processes
+                                                   to spawn.  Must be positive.
+                             2. memory_limit       Optional integral number of MiB
+                                                   to restrict each worker's memory
+                                                   footprint to.  If omitted, defaults
+                                                   to (system memory / number_workers).
+                             3. dashboard_address  Optional URI to the dashboard.
+                                                   If omitted, defaults to "localhost:0"
+                                                   which picks a random port on the
+                                                   loopback adapter.
+
+    Returns 1 value:
+
+      cluster_manager - Context manager representing the cluster resources acquired.
+                        Will be contextlib.nullcontext() when both cluster_address
+                        and cluster_parameters are specified as None.
+
+    """
+
+    #
+    # NOTE: we don't unconditionally import the modules found in this routine at
+    #       the top of the script as they're not frequently used and don't need
+    #       to slow down the common use case.
+    #
+    if cluster_address is not None:
+        import dask.distributed
+
+        # attempt to connect to an existing cluster.
+        try:
+            cluster_manager = dask.distributed.Client( cluster_address )
+        except Exception as e:
+            raise RuntimeError( "Failed to connect to '{:s}' - {:s}".format(
+                cluster_address,
+                str( e ) ) )
+    elif cluster_parameters is not None:
+        import dask.distributed
+
+        # attempt to create a new local cluster.
+        (number_workers,
+         memory_limit,
+         dashboard_address) = cluster_parameters
+
+        # our memory limits are provided in MiB per process.
+        if memory_limit is not None:
+            memory_limit = "{:d}M".format( memory_limit )
+
+        # default to a locally-accessible dashboard with a randomly selected
+        # port.  the port selected is part of the URI available from the
+        # .dashboard_address attribute on the returned context manager.
+        if dashboard_address is None:
+            dashboard_address = "localhost:0"
+
+        try:
+            cluster_manager = dask.distributed.LocalCluster( n_workers=number_workers,
+                                                             memory_limit=memory_limit,
+                                                             dashboard_address=dashboard_address )
+        except Exception as e:
+            raise RuntimeError( "Failed to launch a local cluster (number_workers={:d}, "
+                                "memory_limit={}, dashboard_address={:s}) - {:s}".format(
+                                    number_workers,
+                                    memory_limit,
+                                    dashboard_address,
+                                    str( e ) ) )
+    else:
+        import contextlib
+
+        # common case: we don't have a Dask cluster to distribute our work.
+        cluster_manager = contextlib.nullcontext()
+
+    return cluster_manager
+
 def print_usage( program_name, file_handle=sys.stdout ):
     """
     Prints the script's usage to standard output.
@@ -38,7 +127,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
     """
 
     usage_str = \
-"""{program_name:s} [-c <colormap>] [-F] [-h] [-L] [-l <labels_path>[,<color>]] [-q <quant_table>] [-S <statistics_path>] [-s <min>:<max>:<std>[,...]] [-T] [-t <time_start>:<time_stop>] [-v] [-z <z_start>:<z_stop>] <netcdf_pattern> <output_root> <experiment> <variables>
+"""{program_name:s} [-C <cluster_address>] [-c <colormap>] [-F] [-h] [-L] [-l <labels_path>[,<color>]] [-n <cluster_spec>] [-q <quant_table>] [-S <statistics_path>] [-s <min>:<max>:<std>[,...]] [-T] [-t <time_start>:<time_stop>] [-v] [-z <z_start>:<z_stop>] <netcdf_pattern> <output_root> <experiment> <variables>
 
     Renders subsets of IWP datasets into a tree of PNG images suitable for analysis
     or labeling.  The netCDF4 files at <netcdf_pattern> are read and a subset of time
@@ -67,6 +156,12 @@ def print_usage( program_name, file_handle=sys.stdout ):
                                      the name of a valid Matplotlib colormap that is
                                      found at "matplotlib.cm.<colormap>".  If omitted,
                                      defaults to "{colormap:s}".
+        -C <cluster_address>         Use the Dask distributed workers located at
+                                     <cluster_address>.  One connection attempt will be
+                                     made before giving up and exiting the script.
+                                     If omitted, all work is done in the local Python
+                                     instance.  May not be specified when a local
+                                     cluster is requested (see '-n' below).
         -F                           Rendered images are decorated Matplotlib figures
                                      instead of converting XY slices directly.  If
                                      omitted, XY slices are converted directly.
@@ -82,6 +177,27 @@ def print_usage( program_name, file_handle=sys.stdout ):
                                      If both are omitted, no labels are overlaid.  If
                                      <color> is omitted, a high contrast default is
                                      selected.
+        -n <cluster_spec>            Dask local cluster specification to distribute
+                                     label data creation across.  <cluster_spec> has
+                                     the form:
+
+                                       <number_workers>[:<memory_limit>[:<dashboard_port>]]
+
+                                     <number_workers> specifies the number of processes
+                                     to start locally.  If <memory_limit> is provided,
+                                     it sets a hard memory limit in MiB for each worker
+                                     process to adhere to.  If <dashboard_port> is
+                                     specified, it is provided to the local cluster
+                                     configuration.  If the cluster cannot be created
+                                     for any reason (including <dashboard_port> being
+                                     in use), the script will exit.
+
+                                     If <memory_limit> is omitted, no constrain per
+                                     worker is imposed which may exhaust the system's
+                                     resources for large jobs.  If <dashboard_port>
+                                     is omitted, a random port is selected internally.
+                                     May not be specified when an existing cluster
+                                     is specified (see '-C' above).
         -q <quant_table>             Use <quant_table> for quantizing XY slice data
                                      into image data.  Must be a valid IWP quantization
                                      table that is found at "iwp.quantization.<quant_table>".
@@ -151,6 +267,23 @@ def parse_command_line( argv ):
 
                       .colormap_name            - String specifying the name of a
                                                   Matplotlib colormap.
+                      .dask_cluster_address     - Address of an existing Dask cluster
+                                                  to connect to for distributing
+                                                  work to.  None if a cluster was
+                                                  not provided.  At most, one of
+                                                  .dask_cluster_address and
+                                                  .dask_cluster_parameters may be
+                                                  non-None.
+                      .dask_cluster_parameters  - Parameters for a local Dask cluster
+                                                  to create and distribute work to.
+                                                  When specified, is a tuple of three
+                                                  elements specifying: 1) number
+                                                  workers, 2) memory limit in MiB
+                                                  per worker, and 3) dashboard
+                                                  address to use.  At most, one of
+                                                  .dask_cluster_address and
+                                                  .dask_cluster_parameters may be
+                                                  non-None.
                       .iwp_labels_path          - Path to IWP labels to overlay on
                                                   rendered images.  None if a labels
                                                   file was not specified.
@@ -230,6 +363,8 @@ def parse_command_line( argv ):
     # metadata titles are burned into images generated and statistics are
     # computed globally prior to rendering images.
     options.colormap_name            = DEFAULT_COLORMAP_NAME
+    options.dask_cluster_address     = None
+    options.dask_cluster_parameters  = None
     options.iwp_labels_path          = None
     options.label_color              = DEFAULT_LABEL_COLOR
     options.local_statistics_flag    = False
@@ -244,7 +379,7 @@ def parse_command_line( argv ):
 
     # parse our command line options.
     try:
-        option_flags, positional_arguments = getopt.getopt( argv[1:], "c:Fhl:Lq:s:S:Tt:vz:" )
+        option_flags, positional_arguments = getopt.getopt( argv[1:], "C:c:Fhl:Ln:q:s:S:Tt:vz:" )
     except getopt.GetoptError as error:
         raise ValueError( "Error processing option: {:s}\n".format( str( error ) ) )
 
@@ -252,6 +387,8 @@ def parse_command_line( argv ):
     for option, option_value in option_flags:
         if option == "-c":
             options.colormap_name = option_value
+        if option == "-C":
+            options.dask_cluster_address = option_value
         elif option == "-F":
             options.render_figure_flag = True
         elif option == "-h":
@@ -272,6 +409,20 @@ def parse_command_line( argv ):
             else:
                 raise ValueError( "Invalid label specification received ({:s}).".format(
                     option_value ) )
+        elif option == "-n":
+            options.dask_cluster_parameters = option_value.split( ":" )
+
+            if not (0 < len( options.dask_cluster_parameters ) <= 3):
+                raise ValueError( "Local Dask cluster specification must be of the form  "
+                                  "'<number_workers>[:<memory_limit>[:<dashboard_address>]]' but "
+                                  "received '{:s}'.".format(
+                                      option_value ) )
+
+            # ensure that we have three parameters, even if some are
+            # placeholders.
+            options.dask_cluster_parameters.extend( [None] *
+                                                    (3 - len( options.dask_cluster_parameters )) )
+
         elif option == "-q":
             options.quantization_table_name = option_value
         elif option == "-S":
@@ -386,6 +537,63 @@ def parse_command_line( argv ):
             "Matplotlib" if options.render_figure_flag else "PIL",
             options.label_color ) )
 
+    # we can only use one cluster at a time, so the caller must be clear in
+    # their specification.
+    if ((options.dask_cluster_address is not None) and
+        (options.dask_cluster_parameters is not None)):
+        raise ValueError( "Must specify either an existing Dask cluster to connect "
+                          "to or parameters to create a local cluster, but not both." )
+
+    # check that the parameters to create a local cluster make sense.
+    #
+    # NOTE: we don't have to validate a cluster address as that is done
+    #       implicitly when we attempt to connect to it.
+    #
+    if options.dask_cluster_parameters is not None:
+        (number_workers,
+         memory_limit,
+         dashboard_address) = options.dask_cluster_parameters
+
+        # ensure that we got 1 or more workers.
+        try:
+            number_workers = int( number_workers )
+
+            if number_workers <= 0:
+                raise ValueError()
+
+        except ValueError as e:
+            #
+            # NOTE: we don't specify this as a string type since we may leave
+            #       the try block either as a string or as an integer.
+            #
+            raise ValueError( "Invalid number of Dask cluster workers specified ({}).".format(
+                number_workers ) )
+        else:
+            options.dask_cluster_parameters[0] = number_workers
+
+        # ensure that we got an positive number of MiB.
+        if memory_limit is not None:
+            try:
+                memory_limit = int( memory_limit )
+
+                if memory_limit <= 0:
+                    raise ValueError()
+
+            except ValueError as e:
+                #
+                # NOTE: we don't specify this as a string type since we may leave
+                #       the try block either as a string or as an integer.
+                #
+                raise ValueError( "Invalid Dask cluster worker memory limit specified ({}).".format(
+                    memory_limit ) )
+            else:
+                options.dask_cluster_parameters[1] = memory_limit
+
+        #
+        # NOTE: we don't validate the dashboard address.  this will be
+        #       implicitly checked when the cluster is created.
+        #
+
     return options, arguments
 
 def main( argv ):
@@ -417,142 +625,162 @@ def main( argv ):
     if (options is None) and (arguments is None):
         return 0
 
-    # default to None specifies local statistics computation.
-    variable_statistics = None
-
-    # load statistics from disk if provided.
-    if (not options.local_statistics_flag) and (options.variable_statistics_path is not None):
-        try:
-            loaded_statistics = iwp.statistics.load_statistics( options.variable_statistics_path )
-        except Exception as e:
-            print( "Failed to load statistics from '{:s}' ({:s}).".format(
-                options.variable_statistics_path,
-                str( e ) ),
-                   file=sys.stderr )
-            return 1
-
-        # pack the serialized statistics into lists that match the
-        # iwp.quantization interface.
-        variable_statistics = {}
-        for variable_name in loaded_statistics.keys():
-            # attempt to unpack the statistics of interest.  if these don't all
-            # exist, then we pretend we didn't get any.
-            try:
-                variable_statistics[variable_name] = [
-                    loaded_statistics[variable_name]["minimum"],
-                    loaded_statistics[variable_name]["maximum"],
-                    loaded_statistics[variable_name]["stddev"]
-                ]
-            except Exception:
-                pass
-            else:
-                if options.verbose_flag:
-                    print( "Loaded statistics for '{:s}'.".format(
-                        variable_name ) )
-
-    # acquire a quantization table.
-    quantization_table_builder = iwp.utilities.lookup_module_function( iwp.quantization,
-                                                                       options.quantization_table_name )
-
-    if quantization_table_builder is None:
-        print( "Invalid quantization table builder specified ('{:s}').".format(
-            options.quantization_table_name ),
-               file=sys.stderr )
-        return 1
-
-    # acquire a color map.
-    colormap = iwp.utilities.lookup_module_function( matplotlib.cm,
-                                                     options.colormap_name )
-
-    if colormap is None:
-        print( "Invalid colormap specified ('{:s}').".format(
-            options.colormap_name ),
-               file=sys.stderr )
-        return 1
-
-    # acquire the IWP labels.
-    iwp_labels = []
-    if options.iwp_labels_path is not None:
-        try:
-            iwp_labels = iwp.labels.load_iwp_labels( options.iwp_labels_path )
-
-            if options.verbose_flag:
-                print( "Loaded {:d} label{:s}.".format(
-                    len( iwp_labels ),
-                    "" if len( iwp_labels ) == 1 else "s" ) )
-        except Exception as e:
-            print( "Failed to load IWP labels from '{:s}' ({:s}).".format(
-                options.iwp_labels_path,
-                str( e ) ),
-                   file=sys.stderr )
-            return 1
-
-    # open the dataset.
+    # figure out our Dask cluster configuration first.  this ensures that any
+    # heavyweight setup operations benefit from its existence.
     try:
-        xarray_dataset = iwp.data_loader.open_xarray_dataset( arguments.netcdf_path_pattern )
+        cluster_manager = _get_dask_cluster_manager( options.dask_cluster_address,
+                                                     options.dask_cluster_parameters )
+
+        # announce the cluster's dashboard if we launched/connected properly.
+        # this lets us connect our browser and view work as it is distributed.
+        if options.verbose_flag and hasattr( cluster_manager, "dashboard_link" ):
+            print( "Dask cluster dashboard is at '{:s}'.".format(
+                cluster_manager.dashboard_link ) )
     except Exception as e:
-        print( "Failed to load a dataset from '{}' ({:s}).".format(
-            arguments.netcdf_path_pattern,
+        print( "Failed to get a cluster manager ({:s}).".format(
             str( e ) ),
                file=sys.stderr )
         return 1
 
-    # default to the entirety of each dimension if the caller has not specified
-    # ranges of interest.
-    if options.time_index_range is None:
-        options.time_index_range = list( xarray_dataset.coords["Cycle"].values )
-    if options.slice_index_range is None:
-        options.slice_index_range = range( len( xarray_dataset.coords["z"] ) )
+    with cluster_manager:
+        # default to None specifies local statistics computation.
+        variable_statistics = None
 
-    # ensure that accessing the dataset will not cause any issues in the middle
-    # of our data generation.  better to bail now with a sensible error message.
-    try:
-        iwp.utilities.validate_variables_and_ranges( xarray_dataset,
-                                                     arguments.variable_names,
-                                                     options.time_index_range,
-                                                     options.slice_index_range )
-    except ValueError as e:
-        print( "Failed to validate the request ({:s}).".format(
-            str( e ) ) )
-        return 1
+        # load statistics from disk if provided.
+        if (not options.local_statistics_flag) and (options.variable_statistics_path is not None):
+            try:
+                loaded_statistics = iwp.statistics.load_statistics( options.variable_statistics_path )
+            except Exception as e:
+                print( "Failed to load statistics from '{:s}' ({:s}).".format(
+                    options.variable_statistics_path,
+                    str( e ) ),
+                       file=sys.stderr )
+                return 1
 
-    # handle computing global statistics or using the statistics overrides.
-    if not options.local_statistics_flag:
-        # handle the case where we did not load statistics from disk.
-        if variable_statistics is None:
+            # pack the serialized statistics into lists that match the
+            # iwp.quantization interface.
             variable_statistics = {}
-
-        if len( options.statistics_override_list ) > 0:
-            # map the overrides to their variable names.
-            for variable_index, variable_name in enumerate( arguments.variable_names ):
-                variable_statistics[variable_name] = options.statistics_override_list[variable_index]
-        else:
-            # compute global statistics for each variable that doesn't have them
-            # pre-loaded.
-            for variable_name in arguments.variable_names:
-                if variable_name not in variable_statistics:
-
+            for variable_name in loaded_statistics.keys():
+                # attempt to unpack the statistics of interest.  if these don't all
+                # exist, then we pretend we didn't get any.
+                try:
+                    variable_statistics[variable_name] = [
+                        loaded_statistics[variable_name]["minimum"],
+                        loaded_statistics[variable_name]["maximum"],
+                        loaded_statistics[variable_name]["stddev"]
+                    ]
+                except Exception:
+                    pass
+                else:
                     if options.verbose_flag:
-                        print( "Computing statistics for '{:s}'.".format(
+                        print( "Loaded statistics for '{:s}'.".format(
                             variable_name ) )
 
-                    variable_statistics[variable_name] = iwp.statistics.compute_statistics( xarray_dataset[variable_name] )
+        # acquire a quantization table.
+        quantization_table_builder = iwp.utilities.lookup_module_function( iwp.quantization,
+                                                                           options.quantization_table_name )
 
-    # render each of the requested XY slices as images.
-    iwp.rendering.ds_write_xy_slice_images( xarray_dataset,
-                                            arguments.output_root,
-                                            arguments.experiment_name,
-                                            arguments.variable_names,
-                                            options.time_index_range,
-                                            options.slice_index_range,
-                                            variable_statistics,
-                                            colormap,
-                                            quantization_table_builder,
-                                            render_figure_flag=options.render_figure_flag,
-                                            title_flag=options.title_images_flag,
-                                            iwp_labels=iwp_labels,
-                                            label_color=options.label_color,
-                                            verbose_flag=options.verbose_flag ),
+        if quantization_table_builder is None:
+            print( "Invalid quantization table builder specified ('{:s}').".format(
+                options.quantization_table_name ),
+                   file=sys.stderr )
+            return 1
+
+        # acquire a color map.
+        colormap = iwp.utilities.lookup_module_function( matplotlib.cm,
+                                                         options.colormap_name )
+
+        if colormap is None:
+            print( "Invalid colormap specified ('{:s}').".format(
+                options.colormap_name ),
+                   file=sys.stderr )
+            return 1
+
+        # acquire the IWP labels.
+        iwp_labels = []
+        if options.iwp_labels_path is not None:
+            try:
+                iwp_labels = iwp.labels.load_iwp_labels( options.iwp_labels_path )
+
+                if options.verbose_flag:
+                    print( "Loaded {:d} label{:s}.".format(
+                        len( iwp_labels ),
+                        "" if len( iwp_labels ) == 1 else "s" ) )
+            except Exception as e:
+                print( "Failed to load IWP labels from '{:s}' ({:s}).".format(
+                    options.iwp_labels_path,
+                    str( e ) ),
+                       file=sys.stderr )
+                return 1
+
+        # open the dataset.
+        try:
+            xarray_dataset = iwp.data_loader.open_xarray_dataset( arguments.netcdf_path_pattern )
+        except Exception as e:
+            print( "Failed to load a dataset from '{}' ({:s}).".format(
+                arguments.netcdf_path_pattern,
+                str( e ) ),
+                   file=sys.stderr )
+            return 1
+
+        # default to the entirety of each dimension if the caller has not specified
+        # ranges of interest.
+        if options.time_index_range is None:
+            options.time_index_range = list( xarray_dataset.coords["Cycle"].values )
+        if options.slice_index_range is None:
+            options.slice_index_range = range( len( xarray_dataset.coords["z"] ) )
+
+        # ensure that accessing the dataset will not cause any issues in the middle
+        # of our data generation.  better to bail now with a sensible error message.
+        try:
+            iwp.utilities.validate_variables_and_ranges( xarray_dataset,
+                                                         arguments.variable_names,
+                                                         options.time_index_range,
+                                                         options.slice_index_range )
+        except ValueError as e:
+            print( "Failed to validate the request ({:s}).".format(
+                str( e ) ) )
+            return 1
+
+        # handle computing global statistics or using the statistics overrides.
+        if not options.local_statistics_flag:
+            # handle the case where we did not load statistics from disk.
+            if variable_statistics is None:
+                variable_statistics = {}
+
+            if len( options.statistics_override_list ) > 0:
+                # map the overrides to their variable names.
+                for variable_index, variable_name in enumerate( arguments.variable_names ):
+                    variable_statistics[variable_name] = options.statistics_override_list[variable_index]
+            else:
+                # compute global statistics for each variable that doesn't have them
+                # pre-loaded.
+                for variable_name in arguments.variable_names:
+                    if variable_name not in variable_statistics:
+
+                        if options.verbose_flag:
+                            print( "Computing statistics for '{:s}'.".format(
+                                variable_name ) )
+
+                        variable_statistics[variable_name] = iwp.statistics.compute_statistics( xarray_dataset[variable_name] )
+
+        # render each of the requested XY slices as images.
+        iwp.rendering.ds_write_xy_slice_images( xarray_dataset,
+                                                arguments.output_root,
+                                                arguments.experiment_name,
+                                                arguments.variable_names,
+                                                options.time_index_range,
+                                                options.slice_index_range,
+                                                variable_statistics,
+                                                colormap,
+                                                quantization_table_builder,
+                                                render_figure_flag=options.render_figure_flag,
+                                                title_flag=options.title_images_flag,
+                                                iwp_labels=iwp_labels,
+                                                label_color=options.label_color,
+                                                verbose_flag=options.verbose_flag ),
+
+        # now we leave the cluster context manager.
 
     # we don't have a return code from the rendering, so assume if we got here
     # that everything is okay.
