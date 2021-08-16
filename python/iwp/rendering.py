@@ -1,6 +1,7 @@
 import copy
 import io
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 import matplotlib as mpl
 import numpy as np
 import os
@@ -747,6 +748,15 @@ def ds_write_xy_slice_images( ds, output_root, experiment_name, variable_names, 
     # propagate the request to create figures down the stack.
     if render_figure_flag:
         image_parameters["render_figure_flag"] = True
+
+        # create a tick formatter that uses scientific notation and moves the
+        # exponent above the colorbar itself.  we want "x 10^{exponent}" rather
+        # than "e{exponent}" and to force its use at all scales rather than only
+        # at exponents with magnitude >= 4.
+        colorbar_formatter = matplotlib.ticker.ScalarFormatter( useMathText=True )
+        colorbar_formatter.set_powerlimits( (0, 0) )
+
+        image_parameters["colorbar_formatter"] = colorbar_formatter
 
     if len( iwp_labels ) > 0:
         image_parameters["iwp_labels"]  = iwp_labels
