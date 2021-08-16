@@ -2,6 +2,7 @@ import matplotlib.colors as colors
 import matplotlib.cm as cm
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import numpy as np
@@ -9,6 +10,92 @@ import numpy as np
 import iwp.labels
 
 # collection of routines to aide in analyzing IWP data.
+
+class FixedScientificFormatter( matplotlib.ticker.ScalarFormatter ):
+    """
+    Matplotlib tick formatter class for use with dynamic range floating point values
+    where the caller knows precisely how their scientific representation should look.
+
+    This class fills the gaps that the matplotlib.ticker.ScalarFormatter class has
+    when working with near zero where the parent class dynamically switches the tick
+    label format from scientific notation to floating point notation (with variable
+    numbers of digits of precision) when the ticks are located "close" to zero.
+    Instead, this class fixes the label format at object creation time based on
+    caller parameters so as to provide consistent tick labels.
+
+    """
+
+    def __init__( self, order, preferred_format, offset_flag=True, math_text_flag=True ):
+        """
+        Construct a FixedScientificFormatter object.  Specifies overrides for tick's
+        order of magnitudes and formatting string, which are normally dynamically
+        computed from the ticks as needed.
+
+        Takes 4 arguments:
+
+          order            - Integer specifying the order of the exponent to use.
+          preferred_format - Format string using the Python2 string formatting
+                             syntax (e.g. "%1.1f").  Tick values are rendered to labels
+                             with this.
+          offset_flag      - Optional flag specifying whether tick labels should
+                             use offset notation or not.  If specified as True, tick
+                             labels are offset relative to the order parameter,
+                             otherwise they are scaled by the order.  If omitted,
+                             defaults to True.
+          math_text_flag   - Optional flag specifying whether tick labels should
+                             be rendered with LaTeX formatting.  If omitted, defaults to
+                             True.
+
+        Returns 1 value:
+
+          self - Newly constructed FixedScientificFormatter object.
+
+        """
+
+        # initialize our parent's state.
+        super().__init__( useOffset=offset_flag, useMathText=math_text_flag )
+
+        # hang on to the formatting labels for later.
+        self._order_of_magnitude = order
+        self._preferred_format   = preferred_format
+
+    def _set_format( self ):
+        """
+        Set the format string for the tick labels.  This overrides the
+        matplotlib.ticker.ScalarFormatter implementation to force the format string
+        specified at construction tiem.
+
+        NOTE: This method ignores the current tick values.
+
+        Takes no arguments.
+
+        Returns no values.
+
+        """
+
+        # use our saved format string.
+        self.format = self._preferred_format
+
+        # decorate with LaTeX if we're using mathematical notation.
+        if self._useMathText:
+             self.format = "$\mathdefault{{{:s}}}$".format( self.format )
+
+    def _set_order_of_magnitude( self ):
+        """
+        Sets the exponent for formatting ticks with scientific notation.  This overrides
+        the matplotlib.ticker.ScalarFormatter implementation to force the order of
+        magnitude regardless of the tick locations.
+
+        NOTE: This method ignores the current tick values.
+
+        Takes no arguments.
+
+        Returns no values.
+
+        """
+
+        # use our saved order of magnitude.
+        self.orderOfMagnitude = self._order_of_magnitude
 
 def iwp_labels_to_rectangles( iwp_labels, grid_extents, label_color=None, line_width=2 ):
     """
