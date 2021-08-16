@@ -95,7 +95,7 @@ def iwp_labels_to_rectangles( iwp_labels, grid_extents, label_color=None, line_w
 
     return rectangles, coordinates
 
-def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map=cm.bwr, quantization_table=None, iwp_labels=[], label_color=None, rotate_flag=False, colorbar_flag=True ):
+def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map=cm.bwr, quantization_table=None, iwp_labels=[], label_color=None, rotate_flag=False, colorbar_flag=True, colorbar_formatter=None ):
     """
 
     Renders an XY slice via Matplotlib's imshow() and decorates it so it is easily
@@ -103,7 +103,7 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
     name, while the XY slice's extents can be set if supplied.  The image rendered
     follows IWP conventions and has the origin in the lower left.
 
-    Takes 10 arguments:
+    Takes 12 arguments:
 
       ax_h               - Axes handle to supply to imshow().
       slice_data         - 2D NumPy array containing the XY slice data, shaped (Y, X).
@@ -132,6 +132,12 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
                            before calling imshow().  If omitted, defaults to False.
       colorbar_flag      - Optional flag specifying whether a colorbar should be added
                            to the supplied axes or not.  If omitted, defaults to True.
+      colorbar_formatter - Optional matplotlib.ticker.Formatter-derived tick formatter,
+                           or a string constructor for the matplotlib.ticker.StrMethodFormatter
+                           class.  Controls the formatting of the colorbar's tick
+                           labels.  Has no effect when colorbar_flag is False.  If
+                           omitted, defaults to None and uses the default colorbar
+                           tick label formatting.
 
     Returns 1 value:
 
@@ -247,9 +253,38 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
 
     # add a colorbar.
     if colorbar_flag:
+        #
+        # NOTE: this approach of adding a colorbar axes via a divider limits
+        #       what we can do with respect to positioning and size.  as a
+        #       result, some colorbar_formatters (e.g. those that use a
+        #       ScalarFormatter to get scientific notation scales/orders of
+        #       magnitude at the top of the colorbar) may result in missing
+        #       labels depending on the parent figure's layout.
+        #
+        #       it appears that any modification to the colorbar axes position
+        #       may be discarded at a later date due to
+        #       the parent figure's layout being updaated for rendering
+        #       (particularly constrained layouts - the axes position is
+        #       seemingly reset when a call to show() or a canvas draw()).
+        #
+        #       it does not appear there are any great solutions to creating
+        #       colorbars that have a smaller size, so that decorations
+        #       above/below them don't fall outside of the rendered figure's
+        #       boundaries.
+        #
         divider = make_axes_locatable( ax_h )
         cax_h   = divider.append_axes( "right", size="5%", pad=0.05 )
-        plt.colorbar( slice_h, cax=cax_h )
+
+        plt.colorbar( slice_h,
+                      cax=cax_h,
+                      format=colorbar_formatter )
+
+        # align the colorbar y axes labels along the left side of it.  this
+        # allows labels located above the colorbar to be flush along the left
+        # side (so they overhang the right side) rather than being flush along
+        # the right side (so they overhang the left side and possibly conflict
+        # with a title)
+        cax_h.yaxis.set_offset_position( "left" )
 
     ax_h.set_title( variable_name,
                     fontweight="bold" )

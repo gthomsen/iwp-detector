@@ -183,14 +183,14 @@ def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], lab
 
     return image
 
-def array_to_image_imshow( array, quantization_table, color_map, title_text="", show_axes_labels_flag=True, iwp_labels=[], label_color=None, figure_size=None, colorbar_flag=True, grid_extents=None, indexing_type="ij", **kwargs ):
+def array_to_image_imshow( array, quantization_table, color_map, title_text="", show_axes_labels_flag=True, iwp_labels=[], label_color=None, figure_size=None, colorbar_flag=True, grid_extents=None, indexing_type="ij", colorbar_formatter=None, **kwargs ):
     """
     Takes a NumPy array and creates a Matplotlib figure decorated with title,
     axes labels, and a colorbar.  The array specified is quantized and colorized
     prior to rendering with imshow().  The resulting figure is converted into a
     PIL image.
 
-    Takes 12 arguments:
+    Takes 13 arguments:
 
       array                 - NumPy array of data to convert to pixels.  The data type
                               must be compatible with NumPy's digitize() function.
@@ -228,6 +228,12 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
                               bottom left).  See numpy.meshgrid() for a detailed
                               description of indexing types.  If omitted, defaults to
                               "ij" to match IWP visualization conventions.
+      colorbar_formatter    - Optional matplotlib.ticker.Formatter-derived tick formatter,
+                              or a string constructor for the
+                              matplotlib.ticker.StrMethodFormatter class.  Controls
+                              the formatting of the colorbar's tick labels.  Has no
+                              effect when colorbar_flag is False.  If omitted, defaults
+                              to None and uses the default colorbar tick label formatting.
       kwargs                - Optional keyword arguments dictionary.  Accepted for
                               compatibility with array_to_image()'s calling convention.
 
@@ -280,7 +286,8 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
                                               grid_extents=grid_extents,
                                               iwp_labels=iwp_labels,
                                               label_color=label_color,
-                                              colorbar_flag=colorbar_flag )
+                                              colorbar_flag=colorbar_flag,
+                                              colorbar_formatter=colorbar_formatter )
 
         # attempt to label our axes correctly.  grid extents specify we have
         # data coordinates, so we're either in meters or dimensionless units
