@@ -183,7 +183,7 @@ def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], lab
 
     return image
 
-def array_to_image_imshow( array, quantization_table, color_map, title_text="", show_axes_labels_flag=True, iwp_labels=[], label_color=None, figure_size=None, colorbar_flag=True, grid_extents=None, indexing_type="ij", colorbar_formatter=None, **kwargs ):
+def array_to_image_imshow( array, quantization_table, color_map, title_text="", show_axes_labels_flag=True, iwp_labels=[], label_color=None, figure_size=None, colorbar_flag=True, grid_extents=None, indexing_type="ij", constrained_layout_flag=True, colorbar_formatter=None, **kwargs ):
     """
     Takes a NumPy array and creates a Matplotlib figure decorated with title,
     axes labels, and a colorbar.  The array specified is quantized and colorized
@@ -192,50 +192,63 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
 
     Takes 13 arguments:
 
-      array                 - NumPy array of data to convert to pixels.  The data type
-                              must be compatible with NumPy's digitize() function.
-      quantization_table    - Quantization table to apply to array.  Must be compatible
-                              with NumPy's digitize() function.
-      color_map             - Matplotlib color map to apply.
-      title_text            - Optional title string to burn into the generated image.
-                              If omitted, the image is created without alteration.
-      show_axes_labels_flag - Optional flag specifying whether axes labels should be
-                              rendered.  If omitted, defaults to True.
+      array                   - NumPy array of data to convert to pixels.  The data
+                                type must be compatible with NumPy's digitize()
+                                function.
+      quantization_table      - Quantization table to apply to array.  Must be
+                                compatible with NumPy's digitize() function.
+      color_map               - Matplotlib color map to apply.
+      title_text              - Optional title string to burn into the generated image.
+                                If omitted, the image is created without alteration.
+      show_axes_labels_flag   - Optional flag specifying whether axes labels should
+                                be rendered.  If omitted, defaults to True.
 
-                              NOTE: Axes ticks and tick labels are always rendered,
-                                    this specifies whether the units label is rendered.
+                                NOTE: Axes ticks and tick labels are always
+                                      rendered, this specifies whether the units
+                                      label is rendered.
 
-      iwp_labels            - Optional list of IWP labels to overlay.  If omitted, defaults
-                              to an empty list and nothing is overlaid.
-      label_color           - Optional Matplotlib-compatible label color.  May be a
-                              color string (by English name, by Matplotlib code, by hex,
-                              etc) or a color tuple (RGB or RGBA).  If omitted, defaults
-                              to a high contrast color.
-      figure_size           - Optional sequence specifying the rendered figure's height
-                              and width.  If specified, must be two values in inches.
-                              If omitted, defaults to (10, 8).
-      colorbar_flag         - Optional flag specifying whether a colorbar should be
-                              rendered to the right of the XY slice.  If omitted,
-                              defaults to True.
-      grid_extents          - Optional sequence specifying the data coordinates of the
-                              XY slice.  Sequence of two sequences, each with a pair
-                              of elements specifying the (min, max) for the X and Y
-                              axes (i.e. (min_x, max_x), (min_y, max_y)).  If omitted,
-                              defaults to None and the XY slice axes are labeled in
-                              indices.
-      indexing_type         - Optional string specifying array's indexing method.  Must
-                              be either "xy" (origin in top left) or "ij" (origin in
-                              bottom left).  See numpy.meshgrid() for a detailed
-                              description of indexing types.  If omitted, defaults to
-                              "ij" to match IWP visualization conventions.
-      colorbar_formatter    - Optional matplotlib.ticker.Formatter-derived tick formatter,
-                              or a string constructor for the
-                              matplotlib.ticker.StrMethodFormatter class.  Controls
-                              the formatting of the colorbar's tick labels.  Has no
-                              effect when colorbar_flag is False.  If omitted, defaults
-                              to None and uses the default colorbar tick label formatting.
-      kwargs                - Optional keyword arguments dictionary.  Accepted for
-                              compatibility with array_to_image()'s calling convention.
+      iwp_labels              - Optional list of IWP labels to overlay.  If omitted,
+                                defaults to an empty list and nothing is overlaid.
+      label_color             - Optional Matplotlib-compatible label color.  May be
+                                a color string (by English name, by Matplotlib code,
+                                by hex, etc) or a color tuple (RGB or RGBA).  If
+                                omitted, defaults to a high contrast color.
+      figure_size             - Optional sequence specifying the rendered figure's
+                                height and width.  If specified, must be two values
+                                in inches.  If omitted, defaults to (10, 8).
+      colorbar_flag           - Optional flag specifying whether a colorbar should be
+                                rendered to the right of the XY slice.  If omitted,
+                                defaults to True.
+      grid_extents            - Optional sequence specifying the data coordinates of
+                                the XY slice.  Sequence of two sequences, each with
+                                a pair of elements specifying the (min, max) for the
+                                X and Y axes (i.e. (min_x, max_x), (min_y, max_y)).
+                                If omitted, defaults to None and the XY slice axes
+                                are labeled in indices.
+      indexing_type           - Optional string specifying array's indexing method.
+                                Must be either "xy" (origin in top left) or "ij" (origin
+                                in bottom left).  See numpy.meshgrid() for a detailed
+                                description of indexing types.  If omitted, defaults to
+                                "ij" to match IWP visualization conventions.
+      constrained_layout_flag - Optional flag specifying whether a constrained layout
+                                should be used for the rendered figure.  This attempts
+                                to prevent overlap between axes/figure edges and
+                                their decorations (e.g. the end colorbar tick labels
+                                extending above a title-less sibling axes) by
+                                repositioning/resizing axes.  If specified as False,
+                                falls back to a tight layout which conceptually does
+                                the same thing, though using a different process.
+                                If omitted, defaults to True.
+      colorbar_formatter      - Optional matplotlib.ticker.Formatter-derived tick
+                                formatter, or a string constructor for the
+                                matplotlib.ticker.StrMethodFormatter class.  Controls
+                                the formatting of the colorbar's tick labels.  Has no
+                                effect when colorbar_flag is False.  If omitted,
+                                defaults to None and uses the default colorbar tick
+                                label formatting.
+      kwargs                  - Optional keyword arguments dictionary.  Accepted for
+                                compatibility with array_to_image()'s calling
+                                convention.
 
     Returns 1 value:
 
@@ -258,16 +271,24 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
 
         # create a single axes subplot.
         #
-        # NOTE: we use a constrained layout so that we get consistent axes
-        #       layouts when rendering colorbars.  without this we have the
-        #       issue where a colorbar tick label at the top of the bar may
-        #       cause the XY slice and colorbar axes to shift slightly, so
-        #       that a sequence of XY slices jitters around as the value
-        #       ranges change slice-to-slice.
+        # NOTE: when we use a constrained layout, we get consistent axes
+        #       layouts when rendering colorbars that don't use scientific
+        #       notation (and render a label above the colorbar).  without this
+        #       we have the issue where the last colorbar tick label at the top
+        #       of the bar may cause the XY slice and colorbar axes to shift
+        #       slightly, so that a sequence of XY slices jitters around as the
+        #       value ranges change slice-to-slice.
+        #
+        #       this jitter can also be avoided by not specifying a constrained
+        #       layout while providing a colorbar formatter that renders the
+        #       scale exponent.  since this forces a label to always occur above
+        #       the colorbar, the figure will always add space to accommodate it
+        #       and the last colorbar tick label has room to exist (possibly
+        #       overlapping with the exponent - but you can't win them all...).
         #
         fig_h, ax_h = plt.subplots( 1, 1,
                                     figsize=figure_size,
-                                    constrained_layout=True )
+                                    constrained_layout=constrained_layout_flag )
 
         #
         # NOTE: show_xy_slice() already sets the coordinate system to "ij", so
@@ -317,6 +338,13 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
                                  fontweight="bold" )
                 ax_h.set_ylabel( "y index",
                                  fontweight="bold" )
+
+        # if we're not using the constrained layout approach, adjust the axes so
+        # they 1) don't inadvertently overlap each other and 2) have excess
+        # empty space in the figure.  without this, the image generated has a
+        # smaller axes and "looks" smaller.
+        if not constrained_layout_flag:
+            fig_h.tight_layout()
 
         fig_h.canvas.draw()
     finally:
