@@ -13,6 +13,36 @@ import iwp.labels
 import iwp.statistics
 import iwp.utilities
 
+def image_make_white_transparent( pil_image ):
+    """
+    Makes white pixels fully transparent in the supplied PIL Image.  The
+    returned Image is RGBA regardless of the input's format.
+
+    Takes 1 argument:
+
+      pil_image - PIL Image to make white pixels transparent.
+
+    Returns 1 value:
+
+      transparent_pil_image - RGBA PIL Image with transparent white pixels.
+
+    """
+
+    # get the PIL image as a NumPy array.  this will add a column of zeros if
+    # the source image is RGB.
+    #
+    # NOTE: we make a copy since PIL presents a read-only view when converting
+    #       its representation.
+    #
+    image_data = np.asarray( pil_image.convert( "RGBA" ) ).copy()
+
+    # set alpha channels to either full or no transparency for all pixels.
+    # only pixels that are white (all RGB values of 0xFF) are set transparent.
+    image_data[:, :, 3] = (255 * (image_data[:, :, :3] != 255).any( axis=2 )).astype( np.uint8 )
+
+    # return a new RGBA PIL image.
+    return PIL.Image.fromarray( image_data )
+
 def array_to_pixels( array, quantization_table, color_map, scaler=1 ):
     """
     Quantizes a NumPy array of data, applies a color map, and converts the result to
