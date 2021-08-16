@@ -317,14 +317,27 @@ def create_data_review_presentation( iwp_dataset, experiment_name, variable_name
         else:
             iwp_labels_map[label_key].append( iwp_label )
 
+    # get the dataset's grid coordinates so we can provide descriptive titles
+    # and properly labeled axes on XY slice figures.
+    (x_coordinates,
+     y_coordinates,
+     z_coordinates) = (iwp_dataset.x_coordinates(),
+                       iwp_dataset.y_coordinates(),
+                       iwp_dataset.z_coordinates())
+
+    # get the XY slice grid extents in the format required for figure rendering.
+    xy_grid_extents = (list( x_coordinates[[0, -1]] ),
+                       list( y_coordinates[[0, -1]] ))
+
     # iterate through each of the requested XY slices and make a slide for it.
     for time_index, xy_slice_index in time_xy_slice_pairs:
         current_slide = presentation.slides.add_slide( blank_slide_layout )
 
         # set the title.
         slide_title      = current_slide.placeholders[0]
-        slide_title.text = "{:s}: Z={:03d}, Nt={:03d}".format(
+        slide_title.text = "{:s}: Z={:.2f} ({:03d}), Nt={:03d}".format(
             experiment_name,
+            z_coordinates[xy_slice_index],
             xy_slice_index,
             time_index )
 
@@ -390,6 +403,7 @@ def create_data_review_presentation( iwp_dataset, experiment_name, variable_name
                                                                     figure_size=(xy_slice_positions[variable_index][2].inches,
                                                                                  xy_slice_positions[variable_index][3].inches),
                                                                     show_axes_labels_flag=False,
+                                                                    grid_extents=xy_grid_extents,
                                                                     colorbar_flag=True,
                                                                     colorbar_formatter=colorbar_formatter,
                                                                     constrained_layout_flag=False )
