@@ -567,7 +567,8 @@ class TestSyntheticIWPDataset:
                                               grid_dimensions ) )[::-1]
 
             # create the netCDF grid dimensions and variables associated
-            # with them.
+            # with them.  each axes' coordinates are simply [0, size) in
+            # steps of 1.
             for grid_dimension in grid_dimensions:
                 dimension = ds.createDimension( grid_dimension["name"],
                                                 grid_dimension["size"] )
@@ -575,6 +576,8 @@ class TestSyntheticIWPDataset:
                 dimension_variable = ds.createVariable( grid_dimension["name"],
                                                         grid_dimension["dtype"],
                                                         dimensions=(grid_dimension["name"],) )
+
+                dimension_variable[:] = np.arange( grid_dimension["size"] )
 
             # create each of the grid variables.
             for variable_index, variable in enumerate( variables ):
@@ -1546,6 +1549,10 @@ class TestSyntheticIWPDataset:
         number_variables  = len( variable_names )
         number_slices     = (number_time_steps * number_xy_slices)
 
+        x_coordinates = np.arange( parameters["grid_size"][0] )
+        y_coordinates = np.arange( parameters["grid_size"][1] )
+        z_coordinates = np.arange( parameters["grid_size"][2] )
+
         time_step_indices = list( range( number_time_steps ) )
         xy_slice_indices  = list( range( number_xy_slices ) )
 
@@ -1588,6 +1595,42 @@ class TestSyntheticIWPDataset:
                 netcdf_pattern,
                 len( parameters["variable_names"] ),
                 dataset.number_variables() )
+
+        # verify that the dataset reports the correct X coordinates.
+        assert len( dataset.x_coordinates() ) == parameters["grid_size"][0], \
+            "{:s} has the wrong length X axis.  Expected {:d} entries but got {:d}.".format(
+                netcdf_pattern,
+                parameters["grid_size"][0],
+                len( dataset.x_coordinates() ) )
+
+        assert np.allclose( dataset.x_coordinates(),
+                            np.arange( parameters["grid_size"][0] ) ), \
+            "{:s} has an invalid X axis.  Some entries to not match [0, N).".format(
+                netcdf_pattern )
+
+        # verify that the dataset reports the correct Y coordinates.
+        assert len( dataset.y_coordinates() ) == parameters["grid_size"][1], \
+            "{:s} has the wrong length Y axis.  Expected {:d} entries but got {:d}.".format(
+                netcdf_pattern,
+                parameters["grid_size"][1],
+                len( dataset.y_coordinates() ) )
+
+        assert np.allclose( dataset.y_coordinates(),
+                            np.arange( parameters["grid_size"][1] ) ), \
+            "{:s} has an invalid Y axis.  Some entries to not match [0, N).".format(
+                netcdf_pattern )
+
+        # verify that the dataset reports the correct Z coordinates.
+        assert len( dataset.z_coordinates() ) == parameters["grid_size"][2], \
+            "{:s} has the wrong length Z axis.  Expected {:d} entries but got {:d}.".format(
+                netcdf_pattern,
+                parameters["grid_size"][2],
+                len( dataset.y_coordinates() ) )
+
+        assert np.allclose( dataset.z_coordinates(),
+                            np.arange( parameters["grid_size"][2] ) ), \
+            "{:s} has an invalid Z axis.  Some entries to not match [0, N).".format(
+                netcdf_pattern )
 
         # verify that the dataset's variable names match what was provided
         # during creation.

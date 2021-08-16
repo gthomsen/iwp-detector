@@ -361,6 +361,63 @@ class IWPDataset( torch.utils.data.dataset.Dataset ):
 
         return copy.copy( self._variables )
 
+    def x_coordinates( self ):
+        """
+        Returns a NumPy array of the grid's X coordinates.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          x_coordinates - NumPy array containing the grid's X coordinates.
+
+        """
+
+        # make a copy of the X coordinates for the caller.
+        #
+        # NOTE: we explicitly return an numpy.ndarray rather than a masked array
+        #       since all of the grid coordinates must be present.
+        #
+        return np.copy( self._netcdf_files[0].variables["x"][:].data )
+
+    def y_coordinates( self ):
+        """
+        Returns a NumPy array of the grid's Y coordinates.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          y_coordinates - NumPy array containing the grid's Y coordinates.
+
+        """
+
+        # make a copy of the Y coordinates for the caller.
+        #
+        # NOTE: we explicitly return an numpy.ndarray rather than a masked array
+        #       since all of the grid coordinates must be present.
+        #
+        return np.copy( self._netcdf_files[0].variables["y"][:].data )
+
+    def z_coordinates( self ):
+        """
+        Returns a NumPy array of the grid's Z coordinates.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          z_coordinates - NumPy array containing the grid's Z coordinates.
+
+        """
+
+        # make a copy of the Z coordinates for the caller.
+        #
+        # NOTE: we explicitly return an numpy.ndarray rather than a masked array
+        #       since all of the grid coordinates must be present.
+        #
+        return np.copy( self._netcdf_files[0].variables["z"][:].data )
+
     def time_step_indices( self ):
         """
         Returns a list of time step indices in the dataset.
