@@ -250,9 +250,10 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
                                 compatibility with array_to_image()'s calling
                                 convention.
 
-    Returns 1 value:
+    Returns 2 value:
 
       image - PIL Image created from array's data.
+      fig_h - Matplotlib figure that was exported to image.
 
     """
 
@@ -363,7 +364,7 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
                                  fig_h.canvas.get_width_height(),
                                  fig_h.canvas.tostring_rgb() )
 
-    return image
+    return image, fig_h
 
 def array_to_image( array, quantization_table, color_map, **kwargs ):
     """
@@ -395,10 +396,11 @@ def array_to_image( array, quantization_table, color_map, **kwargs ):
 
     # call the appropriate specialization to create the image.
     if kwargs.get( "render_figure_flag", False ):
-        return array_to_image_imshow( array,
+        image, _ = array_to_image_imshow( array,
                                       quantization_table,
                                       color_map,
                                       **kwargs )
+        return image
     else:
         return array_to_image_PIL( array,
                                    quantization_table,
