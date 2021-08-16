@@ -279,16 +279,19 @@ def find_nearest( data, value ):
 
     return data[value_index], value_index
 
-def variable_name_to_title( variable_name ):
+def variable_name_to_title( variable_name, latex_flag=True ):
     """
     Translates a variable name into a title suitable for inclusion in Matplotlib
     title strings.  Variable names are assumed to be lowercased as found in IWP
     datasets and titles may include LaTeX markers for mathematical typesetting.
     Unknown variable names are returned as is.
 
-    Takes 1 argument:
+    Takes 2 arguments:
 
       variable_name - Variable name to translate.
+      latex_flag    - Optional flag specifying whether LaTeX-encodings should be
+                      used in the translation.  If specified as False, translations
+                      will not use LaTeX.  If omitted, defaults to True.
 
     Returns 1 value:
 
@@ -301,25 +304,55 @@ def variable_name_to_title( variable_name ):
     elif variable_name == "p":
         return "Density"
     elif variable_name == "pprime":
-        return "Density$'$"
+        if latex_flag:
+            return "Density$'$"
+        else:
+            return "Density'"
     elif variable_name == "u":
-        return "$velocity_x$"
+        if latex_flag:
+            return "$velocity_x$"
+        else:
+            return "Velocity - X"
     elif variable_name == "uprime":
-        return "$velocity_x'$"
+        if latex_flag:
+            return "$velocity_x'$"
+        else:
+            return "Acceleration - X"
     elif variable_name == "v":
-        return "$velocity_y$"
+        if latex_flag:
+            return "$velocity_y$"
+        else:
+            return "Velocity - Y"
     elif variable_name == "vprime":
-        return "$velocity_y'$"
+        if latex_flag:
+            return "$velocity_y'$"
+        else:
+            return "Acceleration - Y"
     elif variable_name == "w":
-        return "$velocity_z$"
+        if latex_flag:
+            return "$velocity_z$"
+        else:
+            return "Velocity - Z"
     elif variable_name == "wprime":
-        return "$velocity_z'$"
+        if latex_flag:
+            return "$velocity_z'$"
+        else:
+            return "Acceleration - Z"
     elif variable_name == "vortx":
-        return "$vorticity_x$"
+        if latex_flag:
+            return "$vorticity_x$"
+        else:
+            return "Vorticity - X"
     elif variable_name == "vorty":
-        return "$vorticity_y$"
+        if latex_flag:
+            return "$vorticity_y$"
+        else:
+            return "Vorticity - Y"
     elif variable_name == "vortz":
-        return "$vorticity_z$"
+        if latex_flag:
+            return "$vorticity_z$"
+        else:
+            return "Vorticity - Z"
     elif variable_name.startswith( "morlet" ):
         # Morlet wavelets have an angle preference which is encoded as either
         # "morlet+-angle", "morlet+angle", or "morlet-angle".  handle the
@@ -346,12 +379,18 @@ def variable_name_to_title( variable_name ):
             else:
                 suffix = " ({:s})".format( "-".join( pieces[1:] ) )
 
-            # add "+-N degrees" in LaTeX and then append the remaining
-            # components as a suffix.
-            variable_title = "{:s}$\pm{:s}\circ${:s}".format(
-                variable_title,
-                pieces[0],
-                suffix )
+            if latex_flag:
+                # add "+-N degrees" in LaTeX and then append the remaining
+                # components as a suffix.
+                variable_title = "{:s}$\pm{:s}\circ${:s}".format(
+                    variable_title,
+                    pieces[0],
+                    suffix )
+            else:
+                variable_title = "{:s} +-{:s} degrees{:s}".format(
+                    variable_title,
+                    pieces[0],
+                    suffix )
         elif len( variable_name ) > len( "morlet" ):
             # add the remaining text as a parenthetical.
             variable_title = "{:s} ({:s})".format(
