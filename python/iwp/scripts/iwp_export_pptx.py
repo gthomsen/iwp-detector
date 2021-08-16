@@ -307,19 +307,17 @@ def main( argv ):
 
     # open the dataset.
     try:
-        # figure out the last time step so we can navigate the IWPDataset
-        # interface...
-        last_time_step_index = max( map( lambda slice_pair: slice_pair[0],
-                                         arguments.slice_pairs ) )
+        time_step_indices = set( map( lambda slice_pair: slice_pair[0],
+                                      arguments.slice_pairs ) )
 
         iwp_dataset = iwp.data_loader.IWPDataset( arguments.netcdf_path_pattern[0],
-                                                  range( 1, last_time_step_index + 1 ),
+                                                  list( time_step_indices ),
                                                   variables=arguments.variable_names )
     except ValueError as e:
-        print( "Failed to open the dataset at '{:s}' with times 0:{:d} and "
+        print( "Failed to open the dataset at '{:s}' with times [{:s}] and "
                "variables {:s} ({:s}).".format(
             arguments.netcdf_path_pattern,
-                   last_time_step_index,
+                   ", ".join( sorted( time_step_indices ) ),
                    ", ".join( map( lambda x: "'" + x + "'",
                                    arguments.variable_names ) ),
                    str( e ) ) )
