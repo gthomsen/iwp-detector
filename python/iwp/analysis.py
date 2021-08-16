@@ -6,6 +6,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import numpy as np
 
+import iwp.labels
+
 # collection of routines to aide in analyzing IWP data.
 
 def iwp_labels_to_rectangles( iwp_labels, grid_extents, label_color=None, line_width=2 ):
@@ -248,7 +250,8 @@ def show_xy_slice( ax_h, slice_data, variable_name, grid_extents=None, color_map
 
         ax_h.text( label_name_x_coordinate,
                    label_name_y_coordinate,
-                   "{:s}".format( iwp_labels[label_index]["id"][:6] ),
+                   iwp.labels.get_iwp_label_name( iwp_labels[label_index],
+                                                  shortened_flag=True ),
                    color=label_color )
 
     # add a colorbar.

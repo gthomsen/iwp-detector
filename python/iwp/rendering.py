@@ -165,11 +165,10 @@ def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], lab
                                  (iwp_label["bbox"]["x2"], iwp_label["bbox"]["y2"])),
                                 outline=label_color )
 
-                # overlay the label name (1st six characters) so that it is
-                # slightly above the top of each label's upper left corner.
-                # take care such that the name is always visible even if the
-                # label is at the top of the image (the name is moved inside the
-                # label in that case).
+                # overlay a shortened label name so that it is slightly above the
+                # top of each label's upper left corner.  take care such that the
+                # name is always visible even if the label is at the top of the
+                # image (the name is moved inside the label in that case).
                 #
                 # NOTE: the hardcoded 12 below accounts for the default PIL font
                 #       size on my system (8-10 points?) and leaves 3 pixels
@@ -179,7 +178,8 @@ def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], lab
                 #
                 draw.text( (iwp_label["bbox"]["x1"],
                             max( iwp_label["bbox"]["y1"] - 12, 2 )),
-                           "{:s}".format( iwp_label["id"][:6] ),
+                           iwp.labels.get_iwp_label_name( iwp_label,
+                                                          shortened_flag=True ),
                            fill=label_color )
 
     return image

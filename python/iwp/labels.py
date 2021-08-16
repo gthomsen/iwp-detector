@@ -62,6 +62,40 @@ def get_iwp_augmented_label_key( iwp_label ):
 
     return (*get_iwp_label_key( iwp_label ), iwp_label["id"])
 
+def get_iwp_label_name( iwp_label, shortened_flag=False ):
+    """
+    Retrieves a name for the supplied IWP label.  May be a shortened nickname
+    for readability or the full label identifier depending on the caller's needs.
+
+    Takes 1 argument:
+
+      iwp_label      - IWP label to extract a name from.
+      shortened_flag - Optional flag specifying whether a shortened name is requested.
+                       If specified as True, the first six characters of the name are
+                       returned, otherwise the entire identifier.  If omitted, defaults
+                       to False.
+
+                       NOTE: Shortened names may not necessarily be unique!
+
+    Returns 1 value:
+
+      label_name - Name string associated with iwp_label.
+
+    """
+
+    # the first six characters of an identifier seems fairly unique, since it
+    # covers a space of 6^62 combinations, and is short enough to overlay on
+    # XY slices without cluttering things.
+    #
+    # NOTE: no analysis has been done on Scalabel identifiers to understand
+    #       their generation.  use the full label when uniqueness must be
+    #       guaranteed.
+    #
+    if shortened_flag == True:
+        return iwp_label["id"][:6]
+
+    return iwp_label["id"]
+
 def convert_labels_iwp_to_scalabel( iwp_labels ):
     """
     Converts IWP labels to Scalabel labels.
