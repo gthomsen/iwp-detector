@@ -174,9 +174,11 @@ def print_usage( program_name, file_handle=sys.stdout ):
         -l <labels_path>[,<color>]   Path to IWP labels to overlay on the images
                                      rendered.  Optional <color> to create the labels'
                                      bounding boxes with.  <color> may be specified
-                                     If both are omitted, no labels are overlaid.  If
-                                     <color> is omitted, a high contrast default is
-                                     selected.
+                                     as PIL or Matplotlib colorspec, or as a
+                                     colon-delimited sequence of floating point values
+                                     in the range of [0, 1].  If both are omitted,
+                                     no labels are overlaid.  If <color> is omitted,
+                                     a high contrast default is selected.
         -n <cluster_spec>            Dask local cluster specification to distribute
                                      label data creation across.  <cluster_spec> has
                                      the form:
