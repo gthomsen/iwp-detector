@@ -212,6 +212,9 @@ def parse_command_line( argv ):
         raise ValueError( "Must have between 1 and 3 variables to generate "
                           "review data for, received {:d}.".format(
                               len( arguments.variable_names ) ) )
+    if any( map( lambda name: name.strip() == "", arguments.variable_names ) ):
+        raise ValueError( "Variable names cannot be empty ({:s}).".format(
+            positional_arguments[ARG_VARIABLE_NAMES] ) )
 
     # ensure that we got pairs of non-negative integers.  we don't have a dataset
     # available to know what the upper bounds are so we only make a basic sanity
