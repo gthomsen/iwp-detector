@@ -217,7 +217,7 @@ def _add_xy_slice_shape_group( slide, xy_slice_position, xy_slice_image, xy_slic
 
     return xy_slice_group
 
-def create_data_review_presentation( iwp_dataset, experiment_name, variable_names, time_xy_slice_pairs, data_limits, color_map, quantization_table_builder, iwp_labels=[], label_color=None ):
+def create_data_review_presentation( iwp_dataset, experiment_name, variable_names, time_xy_slice_pairs, data_limits, color_maps, quantization_table_builders, iwp_labels=[], label_color=None ):
     """
     Creates a Powerpoint presentation containing data review slides for a set of
     XY slices.  One slide per XY slice is generated, with up to three variables of
@@ -230,30 +230,33 @@ def create_data_review_presentation( iwp_dataset, experiment_name, variable_name
 
     Takes 9 arguments:
 
-      iwp_dataset                - iwp.data_loader.IWPDataset object containing the XY
-                                   slices to generate review slides for.
-      experiment_name            - String specifying the experiment that generated the slice.
-      variable_names             - List of one, two, or three variable names to generate
-                                   review images for.
-      time_xy_slice_pairs        - List of tuples, (time index, XY slice index), specifying
-                                   the XY slices to generate slides for.
-      data_limits                - Dictionary of tuples, keys are variable names, keys are
-                                   (minimum, maximum, standard deviation), specifying the
-                                   global statistics to normalize each XY slice with.  If
-                                   specified as None, statistics are computed for each XY
-                                   slice independently.
-      color_map                  - Matplotlib color map to apply to the underlying data.
-      quantization_table_builder - Function that generates a quantization table when supplied
-                                   four arguments: number of quantization levels, data minimum,
-                                   data maximum, and data standard deviation.
-      iwp_labels                 - Optional sequence of IWP labels to overlay on the
-                                   generated data.
-      label_color                - Optional sequence specifying the color of overlaid labels.
-                                   Must contain three or four elements specifying RGB or RGBA
-                                   levels (the fourth element, alpha, is ignored when
-                                   specified) as integral values in the range of [0, 255].
-                                   If omitted, defaults to None and selects a high contrast
-                                   color.
+      iwp_dataset                 - iwp.data_loader.IWPDataset object containing the XY
+                                    slices to generate review slides for.
+      experiment_name             - String specifying the experiment that generated the slice.
+      variable_names              - List of one, two, or three variable names to generate
+                                    review images for.
+      time_xy_slice_pairs         - List of tuples, (time index, XY slice index), specifying
+                                    the XY slices to generate slides for.
+      data_limits                 - Dictionary of tuples, keys are variable names, keys are
+                                    (minimum, maximum, standard deviation), specifying the
+                                    global statistics to normalize each XY slice with.  If
+                                    specified as None, statistics are computed for each XY
+                                    slice independently.
+      color_maps                  - Sequence of Matplotlib color maps to apply to each
+                                    of the variables.  Must have the same length as
+                                    variable_names.
+      quantization_table_builders - Sequence of functions that generate a quantization
+                                    table when supplied four arguments: number of quantization
+                                    levels, data minimum, data maximum, and data standard
+                                    deviation.  Must have the same length as variable_names.
+      iwp_labels                  - Optional sequence of IWP labels to overlay on the
+                                    generated data.
+      label_color                 - Optional sequence specifying the color of overlaid labels.
+                                    Must contain three or four elements specifying RGB or RGBA
+                                    levels (the fourth element, alpha, is ignored when
+                                    specified) as integral values in the range of [0, 255].
+                                    If omitted, defaults to None and selects a high contrast
+                                    color.
 
     Returns 1 value:
 
@@ -375,6 +378,9 @@ def create_data_review_presentation( iwp_dataset, experiment_name, variable_name
         # centered, big images for a single variable vs smaller, multi-column
         # layouts for multiple variables).
         for variable_index, variable_name in enumerate( variable_names ):
+            color_map                  = color_maps[variable_index]
+            quantization_table_builder = quantization_table_builders[variable_index]
+
             # get this variable's statistics so we can quantize it properly.
             if data_limits is not None:
                 # pull our variable's statistics out of the global statistics.

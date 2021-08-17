@@ -114,22 +114,28 @@ def parse_command_line( argv ):
       options   - Object whose attributes represent the optional flags parsed.  Contains
                   at least the following:
 
-                      .colormap_name           - String specifying the name of a
-                                                 Matplotlib colormap.
-                      .input_statistics_path   - Path to a JSON file containing
-                                                 pre-computed variable statistics.
-                                                 None if not specified which denotes
-                                                 on-demand, local variable statistics.
-                      .iwp_labels_path         - Path to IWP labels to use during
-                                                 playlist creation.  If omitted,
-                                                 defaults to None specifying no
-                                                 labels are available.
-                      .label_color             - Sequence specifying an RGB color
-                                                 for overlaid labels.  Will have
-                                                 three components (for RGB) in the
-                                                 range of [0, 255].
-                      .quantization_table_name - String specifying the name of a
-                                                 IWP quantization table.
+                      .colormap_names           - Sequence of strings specifying the
+                                                  names of Matplotlib colormaps to
+                                                  apply to the rendered variables.
+                                                  Will have the same length as
+                                                  arguments.variable_names.
+                      .input_statistics_path    - Path to a JSON file containing
+                                                  pre-computed variable statistics.
+                                                  None if not specified which denotes
+                                                  on-demand, local variable statistics.
+                      .iwp_labels_path          - Path to IWP labels to use during
+                                                  playlist creation.  If omitted,
+                                                  defaults to None specifying no
+                                                  labels are available.
+                      .label_color              - Sequence specifying an RGB color
+                                                  for overlaid labels.  Will have
+                                                  three components (for RGB) in the
+                                                  range of [0, 255].
+                      .quantization_table_names - Sequence of strings specifying the
+                                                  name of IWP quantization tables to
+                                                  apply to the rendered variables.
+                                                  Will have the same length as
+                                                  arguments.variable_names.
 
                   NOTE: Will be None if execution is not required.
 
@@ -175,11 +181,11 @@ def parse_command_line( argv ):
     # use reasonable defaults for color maps and quantization tables, and
     # process each XY slice according to global statistics.  labels or
     # pre-computed statistics must be provided to be utilized.
-    options.colormap_name           = DEFAULT_COLORMAP_NAME
-    options.input_statistics_path   = None
-    options.iwp_labels_path         = None
-    options.label_color             = DEFAULT_LABEL_COLOR
-    options.quantization_table_name = DEFAULT_QUANT_TABLE_NAME
+    options.colormap_names           = [DEFAULT_COLORMAP_NAME]
+    options.input_statistics_path    = None
+    options.iwp_labels_path          = None
+    options.label_color              = DEFAULT_LABEL_COLOR
+    options.quantization_table_names = [DEFAULT_QUANT_TABLE_NAME]
 
     # parse our command line options.
     try:
@@ -190,7 +196,7 @@ def parse_command_line( argv ):
     # handle any valid options that were presented.
     for option, option_value in option_flags:
         if option == "-c":
-            options.colormap_name = option_value
+            options.colormap_names = option_value.split( "," )
         elif option == "-h":
             print_usage( argv[0] )
             return (None, None)
@@ -208,7 +214,7 @@ def parse_command_line( argv ):
                 raise ValueError( "Invalid label specification received ({:s}).".format(
                     option_value ) )
         elif option == "-q":
-            options.quantization_table_name = option_value
+            options.quantization_table_names = option_value.split( "," )
         elif option == "-S":
             options.input_statistics_path = option_value
 
@@ -281,6 +287,43 @@ def parse_command_line( argv ):
         raise ValueError( "Invalid Matplotlib color specification provided ({:s}).".format(
             options.label_color ) )
 
+    # ensure that we either got one colormap or one per variable.  replicate
+    # either so that we have one per variable, regardless.
+    if (len( options.colormap_names ) != 1 and
+        len( options.colormap_names ) != len( arguments.variable_names )):
+        raise ValueError( "Must have either 1 or number_variables ({:d}) color maps, "
+                          "received {:d}.".format(
+                              len( arguments.variable_names ),
+                              len( options.colormap_names ) ) )
+    elif any( map( lambda name: name.strip() == "",
+                   options.colormap_names ) ):
+        raise ValueError( "Colormap names cannot be empty ({:s}).".format(
+            ",".join( map( lambda name: "'" + name + "'",
+                           options.colormap_names ) ) ) )
+    elif len( options.colormap_names ) == 1:
+        # we were only supplied a single colormap to apply to all variables.
+        # replicate it as if we were given N-many colormaps, one per variable.
+        options.colormap_names *= len( arguments.variable_names )
+
+    # ensure that we either got one quantization table or one per variable.
+    # replicate either so that we have one per variable, regardless.
+    if (len( options.quantization_table_names ) != 1 and
+        len( options.quantization_table_names ) != len( arguments.variable_names )):
+        raise ValueError( "Must have either 1 or number_variables ({:d}) quantization "
+                          "tables, received {:d}.".format(
+                              len( arguments.variable_names ),
+                              len( options.quantization_table_names ) ) )
+    elif any( map( lambda name: name.strip() == "",
+                   options.quantization_table_names ) ):
+        raise ValueError( "Quantization table names cannot be empty ({:s}).".format(
+            ",".join( map( lambda name: "'" + name + "'",
+                           options.quantization_table_names ) ) ) )
+    elif len( options.quantization_table_names ) == 1:
+        # we were only supplied a single quantization table to apply to all
+        # variables.  replicate it as if we were given N-many quantization
+        # tables, one per variable.
+        options.quantization_table_names *= len( arguments.variable_names )
+
     return options, arguments
 
 def main( argv ):
@@ -333,25 +376,33 @@ def main( argv ):
                        file=sys.stderr )
                 return 1
 
-    # acquire a quantization table.
-    quantization_table_builder = iwp.utilities.lookup_module_function( iwp.quantization,
-                                                                       options.quantization_table_name )
+    # acquire quantization tables.
+    quantization_table_builders = []
+    for quantization_table_name in options.quantization_table_names:
+        quantization_table_builder = iwp.utilities.lookup_module_function( iwp.quantization,
+                                                                           quantization_table_name )
 
-    if quantization_table_builder is None:
-        print( "Invalid quantization table builder specified ('{:s}').".format(
-            options.quantization_table_name ),
-               file=sys.stderr )
-        return 1
+        if quantization_table_builder is None:
+            print( "Invalid quantization table name specified ('{:s}').".format(
+                quantization_table_name ),
+                   file=sys.stderr )
+            return 1
 
-    # acquire a color map.
-    colormap = iwp.utilities.lookup_module_function( matplotlib.cm,
-                                                     options.colormap_name )
+        quantization_table_builders.append( quantization_table_builder )
 
-    if colormap is None:
-        print( "Invalid colormap specified ('{:s}').".format(
-            options.colormap_name ),
-               file=sys.stderr )
-        return 1
+    # acquire color maps.
+    colormaps = []
+    for colormap_name in options.colormap_names:
+        colormap = iwp.utilities.lookup_module_function( matplotlib.cm,
+                                                         colormap_name )
+
+        if colormap is None:
+            print( "Invalid colormap specified ('{:s}').".format(
+                colormap_name ),
+                   file=sys.stderr )
+            return 1
+
+        colormaps.append( colormap )
 
     # open the dataset.
     try:
@@ -411,8 +462,8 @@ def main( argv ):
                                                              arguments.variable_names,
                                                              arguments.slice_pairs,
                                                              variable_statistics,
-                                                             colormap,
-                                                             quantization_table_builder,
+                                                             colormaps,
+                                                             quantization_table_builders,
                                                              iwp_labels=iwp_labels,
                                                              label_color=options.label_color )
 
