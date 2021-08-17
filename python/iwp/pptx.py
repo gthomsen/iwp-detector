@@ -18,7 +18,7 @@ XY_SLICE_HEIGHT_INCHES = 3.9
 # inches.
 XY_SLICE_OFFSET_TOP_INCHES = 1.28
 
-def _add_xy_slice_shape_group( slide, xy_slice_position, xy_slice_image, xy_slice_axes_position, variable_name, iwp_labels, y_axis_label_flag=False ):
+def _add_xy_slice_shape_group( slide, xy_slice_position, xy_slice_image, xy_slice_axes_position, variable_name, iwp_labels, label_color, y_axis_label_flag=False ):
     """
     Adds an XY slice image, its colorbar, and axes label decorations to an existing
     slide. Optionally overlays IWP labels onto the XY slice image.  All generated
@@ -26,7 +26,7 @@ def _add_xy_slice_shape_group( slide, xy_slice_position, xy_slice_image, xy_slic
 
     NOTE: This function updates the slide object provided.
 
-    Takes 7 arguments:
+    Takes 9 arguments:
 
       slide                  - pptx.slide.Slide object to add XY slices to.  This is
                                modified during execution.
@@ -42,6 +42,9 @@ def _add_xy_slice_shape_group( slide, xy_slice_position, xy_slice_image, xy_slic
       iwp_labels             - List of IWP labels whose bounding boxes are normalized
                                into the range of [0, 1].  Each IWP label is rendered
                                as an unfilled box on the XY slice image.
+      label_color            - Optional sequence specifying the color of overlaid labels.
+                               Must contain three elements specifying RGB as integral
+                               values in the range of [0, 255].
       y_axis_label_flag      - Optional flag specifying whether the Y-axis label
                                should be generated.  Specify as True to the first, and
                                False to subsequent XY slices, if multiple are to be
@@ -181,7 +184,7 @@ def _add_xy_slice_shape_group( slide, xy_slice_position, xy_slice_image, xy_slic
                                                      label_box_height )
 
         label_box.fill.background()
-        label_box.line.color.rgb = pptx.dml.color.RGBColor( 0xFF, 0xFF, 0xFF )
+        label_box.line.color.rgb = pptx.dml.color.RGBColor( *label_color )
         label_box.line.width     = pptx.util.Pt( 1 )
 
         # IWP label name label.  add the label's name so that it is positioned
@@ -207,14 +210,14 @@ def _add_xy_slice_shape_group( slide, xy_slice_position, xy_slice_image, xy_slic
         p           = label_name.text_frame.paragraphs[0]
         p.text      = iwp.labels.get_iwp_label_name( iwp_label,
                                                      shortened_flag=True )
-        p.font.color.rgb = pptx.dml.color.RGBColor( 0xFF, 0xFF, 0xFF )
+        p.font.color.rgb = pptx.dml.color.RGBColor( *label_color )
         p.font.bold = True
         p.font.size = pptx.util.Pt( 5 )
         p.alignment = pptx.enum.text.PP_ALIGN.LEFT
 
     return xy_slice_group
 
-def create_data_review_presentation( iwp_dataset, experiment_name, variable_names, time_xy_slice_pairs, data_limits, color_map, quantization_table_builder, iwp_labels=[] ):
+def create_data_review_presentation( iwp_dataset, experiment_name, variable_names, time_xy_slice_pairs, data_limits, color_map, quantization_table_builder, iwp_labels=[], label_color=None ):
     """
     Creates a Powerpoint presentation containing data review slides for a set of
     XY slices.  One slide per XY slice is generated, with up to three variables of
@@ -225,7 +228,7 @@ def create_data_review_presentation( iwp_dataset, experiment_name, variable_name
     Raises ValueError if too few or too many variables are specified.  This prevents
     the generated XY slices from being scaled down so much to be of no use.
 
-    Takes 8 arguments:
+    Takes 9 arguments:
 
       iwp_dataset                - iwp.data_loader.IWPDataset object containing the XY
                                    slices to generate review slides for.
@@ -245,6 +248,12 @@ def create_data_review_presentation( iwp_dataset, experiment_name, variable_name
                                    data maximum, and data standard deviation.
       iwp_labels                 - Optional sequence of IWP labels to overlay on the
                                    generated data.
+      label_color                - Optional sequence specifying the color of overlaid labels.
+                                   Must contain three or four elements specifying RGB or RGBA
+                                   levels (the fourth element, alpha, is ignored when
+                                   specified) as integral values in the range of [0, 255].
+                                   If omitted, defaults to None and selects a high contrast
+                                   color.
 
     Returns 1 value:
 
@@ -259,6 +268,17 @@ def create_data_review_presentation( iwp_dataset, experiment_name, variable_name
         raise ValueError( "Must have between 1 and 3 variables to generate "
                           "review data for, received {:d}.".format(
                               len( variable_names ) ) )
+
+    # if the caller doesn't have a preference, render labels as opaque magenta.
+    # this has a high likelihood of having high contrast relative to the
+    # underlying color map.
+    if label_color is None:
+        label_color = (255, 0, 255)
+    elif not (3 <= len( label_color ) <= 4):
+        raise ValueError( "The label color must be either RGB or RGBA.  Received "
+                          "{:d} color component{:s}.".format(
+                              len( label_color ),
+                              "" if len( label_color ) == 1 else "s" ) )
 
     presentation = pptx.Presentation()
 
@@ -482,6 +502,7 @@ def create_data_review_presentation( iwp_dataset, experiment_name, variable_name
                                         xy_slice_axes_height),
                                        variable_name,
                                        iwp_labels_map.get( label_key, [] ),
+                                       label_color[:3],
                                        y_axis_label_flag=(variable_index == 0))
 
     return presentation

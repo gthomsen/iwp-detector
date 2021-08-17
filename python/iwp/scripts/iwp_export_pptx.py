@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import getopt
+import os
 import sys
 
 import matplotlib.cm
@@ -18,6 +19,10 @@ DEFAULT_COLORMAP_NAME    = "viridis"
 # emphasize the 95th percentile of data by default.
 DEFAULT_QUANT_TABLE_NAME = "build_two_sigma_quantization_table"
 
+# magenta is a high contrast color relative to most colormaps used (viridis,
+# bwr, seismic, inferno, etc).
+DEFAULT_LABEL_COLOR = (1.0, 0.0, 1.0)
+
 def print_usage( program_name, file_handle=sys.stdout ):
     """
     Prints the script's usage to standard output.
@@ -32,7 +37,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
     """
 
     usage_str = \
-"""{program_name:s} [-c <colormap>] [-h] [-l <labels_path>] [-q <quant_table>] [-S <input_statistics_path>] <netcdf_pattern> <pptx_path> <experiment> <variable>[,<variable>[,<variable>]] <time_step_index>,<xy_slice_index> [...]
+"""{program_name:s} [-c <colormap>] [-h] [-l <labels_path>[,<color>]] [-q <quant_table>] [-S <input_statistics_path>] <netcdf_pattern> <pptx_path> <experiment> <variable>[,<variable>[,<variable>]] <time_step_index>,<xy_slice_index> [...]
 
     Exports one or more XY slices from <netcdf_pattern> into an Powerpoint slide deck
     with one slide per XY slice, written to <pptx_path>.
@@ -62,9 +67,14 @@ def print_usage( program_name, file_handle=sys.stdout ):
                                      found at "matplotlib.cm.<colormap>".  If omitted,
                                      defaults to "{colormap:s}".
         -h                           Print this help message and exit.
-        -l <labels_path>             Path to serialized IWP labels to overlay on XY
-                                     slices.  If omitted, each XY slice's variables are
-                                     rendered without decoration.
+        -l <labels_path>[,<color>]   Path to serialized IWP labels to overlay on XY
+                                     slices.  Optional <color> to create the labels'
+                                     bounding boxes with.  <color> may be specified
+                                     as a Matplotlib colorspec or as a
+                                     colon-delimited sequence of floating point
+                                     values in the range of [0, 1].  If both are
+                                     omitted, no labels are overlaid.  If <color> is
+                                     omitted, a high contrast default is selected.
         -q <quant_table>             Use <quant_table> for quantizing XY slice data
                                      into image data.  Must be a valid IWP quantization
                                      table that is found at "iwp.quantization.<quant_table>".
@@ -114,6 +124,10 @@ def parse_command_line( argv ):
                                                  playlist creation.  If omitted,
                                                  defaults to None specifying no
                                                  labels are available.
+                      .label_color             - Sequence specifying an RGB color
+                                                 for overlaid labels.  Will have
+                                                 three components (for RGB) in the
+                                                 range of [0, 255].
                       .quantization_table_name - String specifying the name of a
                                                  IWP quantization table.
 
@@ -164,6 +178,7 @@ def parse_command_line( argv ):
     options.colormap_name           = DEFAULT_COLORMAP_NAME
     options.input_statistics_path   = None
     options.iwp_labels_path         = None
+    options.label_color             = DEFAULT_LABEL_COLOR
     options.quantization_table_name = DEFAULT_QUANT_TABLE_NAME
 
     # parse our command line options.
@@ -180,7 +195,18 @@ def parse_command_line( argv ):
             print_usage( argv[0] )
             return (None, None)
         elif option == "-l":
-            options.iwp_labels_path = option_value
+            option_components = option_value.split( "," )
+
+            # deal with the fact that we take the default color if only a label
+            # path was provided.
+            if len( option_components ) == 1:
+                options.iwp_labels_path = option_components[0]
+            elif len( option_components ) == 2:
+                options.iwp_labels_path = option_components[0]
+                options.label_color     = option_components[1]
+            else:
+                raise ValueError( "Invalid label specification received ({:s}).".format(
+                    option_value ) )
         elif option == "-q":
             options.quantization_table_name = option_value
         elif option == "-S":
@@ -235,6 +261,25 @@ def parse_command_line( argv ):
             raise ValueError( "Slice pair #{:d} has a negative XY slice index ({:d}).".format(
                 pair_index + 1,
                 time_index ) )
+
+    # ensure that labels exist if we're overlaying them.
+    if ((options.iwp_labels_path is not None) and
+        not os.path.isfile( options.iwp_labels_path )):
+        raise ValueError( "Label overlay was requested with labels in '{:s}' but "
+                          "it does not exist.".format(
+                          options.iwp_labels_path ) )
+
+    # validate the color specification provided.
+    try:
+        options.label_color = iwp.utilities.normalize_color_like( options.label_color,
+                                                                  iwp.utilities.ColorSystemType.MATPLOTLIB )
+
+        # map the components into [0, 255] to be compatible with python-pptx.
+        options.label_color = tuple( map( lambda x: int( x * 255 ),
+                                          options.label_color ) )
+    except ValueError:
+        raise ValueError( "Invalid Matplotlib color specification provided ({:s}).".format(
+            options.label_color ) )
 
     return options, arguments
 
@@ -368,7 +413,8 @@ def main( argv ):
                                                              variable_statistics,
                                                              colormap,
                                                              quantization_table_builder,
-                                                             iwp_labels=iwp_labels )
+                                                             iwp_labels=iwp_labels,
+                                                             label_color=options.label_color )
 
     # write the presentation to disk.
     try:
