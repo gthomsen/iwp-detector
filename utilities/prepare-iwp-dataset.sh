@@ -173,7 +173,6 @@ process_netcdf_file()
     #       constructed above and I haven't had time (or the desire) to figure
     #       out why.
     #
-    LOCAL_TESTING_FLAG="yes"
     if [ "${LOCAL_TESTING_FLAG}" = "yes" ]; then
         echo sh -c "${LOCAL_NCAP_COMMAND}"
     else
