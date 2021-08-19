@@ -1,4 +1,5 @@
 import math
+import netCDF4 as nc
 
 import iwp.wavelet
 
@@ -83,6 +84,234 @@ import iwp.wavelet
 #
 SYMMETRIC_MORLET_MAX_MODULUS  = "symmetric_morlet_max_modulus"
 SYMMETRIC_MORLET_SINGLE_SCALE = "symmetric_morlet_single_scale"
+
+class IWPnetCDFTransformer( object ):
+    """
+    Class implementing transformation of a single IWP variable, in an on-disk
+    netCDF4 file, into one or more output variables.  This provides support to
+    post-process data on disk, either for workflow preparation or for development
+    purposes.
+
+    The following pattern describes this class' use case:
+
+      1. Initialize an IWPnetCDFTransformer object describing the reference
+         variable's relationship to the output variables.
+      2. Invoke the IWPnetCDFTransformer object on one or more netCDF4 files to execute
+         the transformations setup in #1.  This may be done in parallel.
+
+    This class is structured such that IWPnetCDFTransformer objects may be
+    serialized and distributed to parallel execution contexts
+    (e.g. multiprocess.pool.Pool) so they are executed concurrently.  Care is taken
+    during object initialization to partially defer setup so that
+    serialization/deserialization is possible via the pickle module.
+
+    """
+
+    def __init__( self, input_name, output_names, transform_specs, verbose_flag=False ):
+        """
+        Creates an IWPnetCDFTransformer object that will apply one or more
+        transformations from a reference variable in a netCDF4 file and write the
+        results into named output variables.
+
+        Transformations are validated during object initialization, though transformer
+        creation and data processing are deferred until the object is called, allowing
+        for serialization/deserialization of the object through Python's native pickling
+        solution.  Consequently, calls may fail due to the underlying netCDF4 file being
+        incompatible with the internal parameters (e.g.  the reference variable doesn't
+        exist).
+
+        Takes 4 arguments:
+
+          input_name      - Name of the reference variable to apply transformations to.
+
+                              NOTE: This must exist in the netCDF4 file supplied when
+                                     transformations are applied.  Processing is aborted
+                                     and an error returned if it does not.
+
+          output_names    - List of variable names to write transformer outputs.  These
+                            will either be created or overwritten depending on whether
+                            they exist at the time when transformations are applied.  Must
+                            have the same number of elements as transformer_specs.
+          transform_specs - List of transformation specifications (see lookup_transform()
+                            for details) to instantiate and apply to input_name during
+                            transformation application.
+          verbose_flag    - Optional boolean flag specifying whether execution should
+                            be verbose.  If omitted, defaults to False.
+
+        Returns 1 value:
+
+          self - Newly created IWPnetCDFTransformer object.
+
+        """
+
+        # make sure we have one name per transform specification.
+        if len( output_names ) != len( transform_specs ):
+            raise ValueError( "Must have variable name per transform specification.  "
+                              "Received {:d} name{:s} and {:d} transform{:s}.".format(
+                                  len( output_names ),
+                                  "" if len( output_names ) == 1 else "s",
+                                  len( transform_specs ),
+                                  "" if len( transform_specs ) == 1 else "s" ) )
+        elif any( map( lambda x: len( x ) == 0, output_names ) ):
+            raise ValueError( "Output names must be non-empty.  At least one name "
+                              "is invalid ('{:s}').".format(
+                                  output_names ) )
+
+        # make sure we have valid transform specifications.  let the user know
+        # about problems now, rather than later, when we're potentially in a
+        # parallel region (and all of the workers have an issue).
+        for transform_index, transform_spec in enumerate( transform_specs ):
+            if not is_valid_transform_spec( transform_spec ):
+                raise ValueError( "Transform #{:d} ('{:s}') is invalid.".format(
+                    transform_index + 1,
+                    transform_spec ) )
+
+        self._input_name   = input_name
+        self._output_names = output_names
+
+        self._verbose_flag = verbose_flag
+
+        #
+        # NOTE: we store the transform specifications at object construction so
+        #       that we meet Python's pickling requirements of no
+        #       locally-captured functions which lookup_transforms() does.
+        #       instead, we validate the requested transforms now so we can
+        #       raise an exception in a (hopefully) non-parallel context and
+        #       then acquire said transforms on demand in a (hopefully) parallel
+        #       context.
+        #
+        self._transforms      = []
+        self._transform_specs = transform_specs
+
+    def __call__( self, netcdf_path ):
+        """
+        Opens a IWP netCDF4 file and applies transforms to the reference variable,
+        storing the result in each of the output variables configured during
+        initialization.  The netCDF4 file is opened for append so output variables
+        can be created or overwritten.
+
+        Takes 1 argument:
+
+          netcdf_path - Path to an IWP netCDF4 file to process.
+
+        Returns 2 values:
+
+          status_code    - Integer status code capturing the result of the call.  0 if
+                           the operation was successful, non-zero if an error occurred.
+          status_message - String describing the result of the call.
+
+        """
+
+        # if this is first time we've been called, lookup the transforms we
+        # need.
+        if len( self._transforms ) == 0:
+            self._setup_transforms()
+
+        if self._verbose_flag:
+            print( "Processing '{:s}': Transforming '{:s}' into {:s} with {:d} transform{:s}.".format(
+                netcdf_path,
+                self._input_name,
+                ", ".join( map( lambda x: "'" + x + "'", self._output_names ) ),
+                len( self._transforms ),
+                "" if len( self._transforms ) == 1 else "s" ) )
+
+        # open the file and apply each of the transforms in a serial manner.
+        #
+        # wrap the entire block with a try/except so that we can gracefully
+        # handle whatever errors bubble up from the netCDF4 package and
+        # return something sensible to the caller.
+        try:
+
+            # since we're either adding a new variable or overwriting an
+            # existing, we need to open the file for append.  opening for
+            # write will wipe out the existing file.
+            #
+            # NOTE: make sure we work with the file as a context manager so that
+            #       the netCDF4 file is closed.  netCDF4/HDF5 seems prone to
+            #       corrupt files and prevent future access without this.
+            #
+            with nc.Dataset( netcdf_path, mode="a" ) as input_nc:
+                # make sure the reference variable exists.  we couldn't do this
+                # at initialization time, so check now.
+                if self._input_name not in input_nc.variables:
+                    raise RuntimeError( "The reference variable '{:s}' does not "
+                                        "exist in '{:s}'.".format(
+                                            self._input_name,
+                                            netcdf_path ) )
+
+                reference_variable = input_nc.variables[self._input_name]
+
+                # walk through each the transforms.
+                for transform_index, transform_tuple in enumerate( self._transforms ):
+                    (transform,
+                     transform_name,
+                     transform_parameters) = transform_tuple
+
+                    variable_name = self._output_names[transform_index]
+
+                    if variable_name not in input_nc.variables:
+                        if self._verbose_flag:
+                            print( "  Creating '{:s}'".format(
+                                variable_name ) )
+
+                        # create this variable as a template of the reference.
+                        # this inherits the reference's data type, dimensions,
+                        # chunk sizes, and filters (i.e. compression
+                        # configuration).  without this, we're likely to get
+                        # sub-optimal defaults.
+                        variable = input_nc.createVariable( variable_name,
+                                                            reference_variable.datatype,
+                                                            reference_variable.dimensions,
+                                                            chunksizes=reference_variable.chunking(),
+                                                            **(reference_variable.filters()) )
+
+                        # copy over any attributes that the reference has.
+                        #
+                        # NOTE: this may not be correct in all cases if this
+                        #       transform changes the units of the data.  this
+                        #       is *very* unlikely to affect anyone as its
+                        #       metadata-only and would add a fair amount of
+                        #       complexity to do right.  let's pretend this
+                        #       isn't an issue and call it a day.
+                        #
+                        input_nc[variable_name].setncatts( input_nc[self._input_name].__dict__ )
+                    elif self._verbose_flag:
+                        print( "  '{:s}' already exists.".format(
+                            variable_name ) )
+
+                    # work each of the XY slices one at a time.
+                    for z_index in range( reference_variable.shape[0] ):
+                        if (z_index % 50) == 0 and self._verbose_flag:
+                            print( "        Z={:d}".format( z_index ) )
+
+                        input_nc[variable_name][z_index, :, :] = transform( reference_variable[z_index, :, :] )
+
+        except Exception as e:
+            # XXX: we may need something more descriptive here
+            return (1, str( e ) )
+
+        return (0, "Success")
+
+    def _setup_transforms( self ):
+        """
+        Translates transformer specifications into the underlying transform functions.
+        Each of the specifications validated at object construction time are
+        looked up and stored internally for future use.
+
+        Takes no arguments.
+
+        Returns nothing.
+
+        """
+
+        #
+        # NOTE: while this is normally fragile, though we can't get here unless
+        #       the object was constructed with one or more valid transform
+        #       specifications.
+        #
+        self._transforms = []
+        for transform_spec in self._transform_specs:
+            self._transforms.append( lookup_transform( transform_spec ) )
 
 def get_symmetric_morlet_max_modulus_transform( transform_parameters ):
     """
