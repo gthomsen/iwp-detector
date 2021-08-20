@@ -280,11 +280,11 @@ INPUT_FILE_LIST="$*"
 
 # ensure we have the tools needed to execute.
 if [ -z "${NCAP2}" ]; then
-    echo "ncdump is not in the PATH!" >&2
+    echo "ncap2 is not in the PATH!" >&2
 
     exit 1
 elif [ -z "${NCDUMP}" ]; then
-    echo "ncap2 is not in the PATH!" >&2
+    echo "ncdump is not in the PATH!" >&2
 
     exit 1
 elif [ -z "${NCINFO}" ]; then
