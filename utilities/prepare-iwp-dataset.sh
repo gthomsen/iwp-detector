@@ -128,7 +128,7 @@ process_netcdf_file()
 
     # scale the coordinates so they're dimensionless.
     if [ "${LOCAL_DIAMETER}" != "0" ]; then
-        LOCAL_NCAP_OPTIONS="${LOCAL_NCAP_OPTIONS} -s 'x=x/${LOCAL_DIAMETER};y=y/${LOCAL_DIAMETER};z=z/${LOCAL_DIAMETER};'"
+        LOCAL_NCAP_OPTIONS="${LOCAL_NCAP_OPTIONS} -s 'x=float(x/${LOCAL_DIAMETER});y=float(y/${LOCAL_DIAMETER});z=float(z/${LOCAL_DIAMETER});'"
     fi
 
     # tell ncap2 to only copy variables that are referenced in the algebra
@@ -162,7 +162,7 @@ process_netcdf_file()
         fi
 
         # "copy" this variable by scaling it by one.
-        LOCAL_NCAP_OPTIONS="${LOCAL_NCAP_OPTIONS} -s '${LOCAL_VARIABLE_NAME}=${LOCAL_VARIABLE_NAME}*1.0;'"
+        LOCAL_NCAP_OPTIONS="${LOCAL_NCAP_OPTIONS} -s '${LOCAL_VARIABLE_NAME}=${LOCAL_VARIABLE_NAME}*1;'"
     done
 
     LOCAL_NCAP_COMMAND="${NCAP2} ${LOCAL_NCAP_OPTIONS} ${LOCAL_INPUT_FILE} ${LOCAL_OUTPUT_FILE}"
