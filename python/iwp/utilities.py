@@ -1,4 +1,5 @@
 import enum
+import numpy as np
 import xarray
 
 import iwp.data_loader
@@ -19,6 +20,85 @@ import iwp.data_loader
 class ColorSystemType( enum.Enum ):
     MATPLOTLIB = 0
     PIL        = 1
+
+def indices_to_regions( indices, is_sorted_flag=True ):
+    """
+    Creates a compact representation of the contiguous regions contained within a
+    list of indices.  This is useful for succintly describing a sequence instead
+    of enumerating all of its contents.
+
+    For example, the following 10 inputs can be described as four distinct regions:
+
+      Input:  [1, 2, 3, 5, 6, 8, 10, 11, 12, 13]
+      Output: [(1, 3), (5, 6), (8, 8), (10, 13)]
+
+    NOTE: This only properly handles inputs with repeated indices when the
+          inputs are sorted.
+
+    Takes 2 arguments:
+
+      indices        - List or Array of integral indices to identify regions in.
+      is_sorted_flag - Optional flag specifying whether indices are already sorted.
+                       If specified as True, sorting the indices is skipped since the
+                       caller took care of it.  If omitted, defaults to True.
+
+    Returns 1 value:
+
+      regions - List of tuples specifying a compact representation of the regions
+                present in indices.  Each tuple contains the first and last index
+                of a region of consecutive indices.  Tuples may describe only a
+                single number (i.e. first and last are equal) for singleton regions.
+                regions is an empty list when indices is.
+
+    """
+
+    # handle the case were we don't have any regions.
+    if len( indices ) == 0:
+        return []
+
+    # ensure that we have have monotonically
+    if not is_sorted_flag:
+        indices = np.sort( indices )
+
+    # take the difference between adjacent indices so we can find discontinuities.
+    index_differences = np.diff( indices )
+
+    # regions are separated by differences larger than 1.  book end the locations
+    # in the original array with the first and last index so we have fence posts
+    # of every region.  fence posts land on the first element of each region, except
+    # the last which is one beyond the number of entries.
+    #
+    # for the following 10 inputs:
+    #
+    #  [1, 2, 3, 5, 6, 8, 10, 11, 12, 13]
+    #
+    # we compute the following 5 fence post indices:
+    #
+    #  [0, 3, 5, 6, 10]
+    #
+    # which represent the 4 regions:
+    #
+    #  [(1, 3), (5, 6), (8, 8), (10, 13)]
+    #
+    # NOTE: because of the difference above, we start at index -1 instead of 0 and
+    #       adjust below.
+    #
+    region_indices = np.concatenate( (np.array( [-1] ),
+                                      np.where( index_differences > 1 )[0],
+                                      np.array( [len( indices ) - 1] )) )
+    region_indices += 1
+
+    # build a list of region indices.  for N + 1 fenceposts, we have N regions that
+    # we get the (start, end) indices for.
+    regions = []
+    for region_number in range( 1, len( region_indices ) ):
+
+        # we start on the previous region's fence post and end one
+        # before this region's fence post.
+        regions.append( [indices[region_indices[region_number - 1]],
+                         indices[region_indices[region_number] - 1]] )
+
+    return regions
 
 def parse_range( range_string ):
     """
