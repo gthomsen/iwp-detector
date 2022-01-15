@@ -409,7 +409,13 @@ def parse_command_line( argv ):
                 options.iwp_labels_path = option_components[0]
                 options.label_color     = option_components[1]
             else:
-                raise ValueError( "Invalid label specification received ({:s}).".format(
+                raise ValueError( "Invalid label specification received.  Must be of "
+                                  "the form <labels_path>[,<colorspec>] ({:s}).\n"
+                                  "\n"
+                                  "<colorspec> may be of the form:\n"
+                                  "\n"
+                                  "   <PIL or Matplotlib name>\n"
+                                  "   <R:G:B>                    (where R, G, and B are in [0, 1])\n".format(
                     option_value ) )
         elif option == "-n":
             options.dask_cluster_parameters = option_value.split( ":" )
