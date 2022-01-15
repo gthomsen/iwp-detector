@@ -137,8 +137,8 @@ def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], lab
                               quantization_table,
                               color_map )
 
-    # render the image into a 4-byte per pixel image.  ensure that the origin
-    # is placed correctly.
+    # render the image into a 4-byte per pixel image.  once loaded, we're using
+    # an XY coordinate system to be consistent with PIL.
     if indexing_type == "xy":
         image = PIL.Image.fromarray( pixels, "RGBA" )
     elif indexing_type == "ij":
@@ -173,28 +173,24 @@ def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], lab
             if all( map( lambda x: type( x ) == float and (0.0 <= x <= 1.0), label_color ) ):
                 label_color = tuple( map( lambda x: int( 255 * x ), label_color ) )
 
-            # flip our labels above the horizontal line if the output image does
-            # not have the same coordinate system as the IWP labels.
-            if indexing_type == "xy":
-                iwp_labels = iwp.labels.flipud_iwp_label_coordinates( iwp_labels,
-                                                                      array.shape[0],
-                                                                      in_place_flag=False )
+            # convert our IWP labels to the XY coordinate system to be
+            # consistent with PIL.  IWP labels always come in IJ coordinates so
+            # we need to flip them to get to XY coordinates.
+            #
+            # NOTE: we make a copy of the labels so we can convert from
+            #       normalized coordinates to pixel coordinates below without an
+            #       additional copy being made.
+            #
+            iwp_labels = iwp.labels.flipud_iwp_label_coordinates( iwp_labels,
+                                                                  1,
+                                                                  in_place_flag=False )
 
             # map the IWP labels from normalized coordinates to pixel
             # coordinates.
-            #
-            # NOTE: we make a copy of the labels to avoid altering our caller's
-            #       state.  we *could* combine this with the xy case's in place
-            #       but it is a) not a common use case and b) the number of
-            #       labels per image are small so we make a duplicate copy.
-            #
-            #       the amount of time it took to write this comment will far
-            #       outweigh the time saved by minimizing the memory footprint.
-            #
-            iwp_labels = iwp.labels.scale_iwp_label_coordinates( iwp_labels,
-                                                                 array.shape[1],
-                                                                 array.shape[0],
-                                                                 in_place_flag=False )
+            iwp.labels.scale_iwp_label_coordinates( iwp_labels,
+                                                    array.shape[1],
+                                                    array.shape[0],
+                                                    in_place_flag=True )
 
             for iwp_label in iwp_labels:
                 # overlay the label outline.
