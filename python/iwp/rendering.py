@@ -331,16 +331,16 @@ def array_to_image_imshow( array, quantization_table, color_map, title_text="", 
             array = np.flipud( array )
 
         # render the figure.
-        image_h = iwp.analysis.show_xy_slice( ax_h,
-                                              array,
-                                              title_text,
-                                              color_map=color_map,
-                                              quantization_table=quantization_table,
-                                              grid_extents=grid_extents,
-                                              iwp_labels=iwp_labels,
-                                              label_color=label_color,
-                                              colorbar_flag=colorbar_flag,
-                                              colorbar_formatter=colorbar_formatter )
+        _ = iwp.analysis.show_xy_slice( ax_h,
+                                        array,
+                                        title_text,
+                                        color_map=color_map,
+                                        quantization_table=quantization_table,
+                                        grid_extents=grid_extents,
+                                        iwp_labels=iwp_labels,
+                                        label_color=label_color,
+                                        colorbar_flag=colorbar_flag,
+                                        colorbar_formatter=colorbar_formatter )
 
         # attempt to label our axes correctly.  grid extents specify we have
         # data coordinates, so we're either in meters or dimensionless units

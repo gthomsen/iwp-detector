@@ -569,7 +569,7 @@ def parse_command_line( argv ):
             if number_workers <= 0:
                 raise ValueError()
 
-        except ValueError as e:
+        except ValueError:
             #
             # NOTE: we don't specify this as a string type since we may leave
             #       the try block either as a string or as an integer.
