@@ -57,7 +57,7 @@ def print_usage( program_name, file_handle=sys.stdout ):
                                      are loaded prior to computation allowing for
                                      building dataset statistics in stages.  If omitted,
                                      all statistics are computed on the fly.
-        -s <z_start>:<z_stop>        Specifies a range of XY slice indices to compute
+        -s <z_start>:<z_stop>[,...]  Specifies a range of XY slice indices to compute
                                      statistics for.  All XY slices in [<z_start>, <z_stop>]
                                      must be present in the data found in <netcdf_pattern>.
                                      If omitted, defaults to all XY slices available.
@@ -96,10 +96,8 @@ def parse_command_line( argv ):
                   at least the following:
 
                       .force_flag            - Flag specifying forced execution.
-                      .slice_index_range     - Range object specifying the XY indices
-                                               o process.
-                      .time_index_range      - Range object specifying the time
-                                               indices to process.
+                      .slice_indices         - List of XY indices to process.
+                      .time_indices          - list of time indices to process.
                       .input_statistics_path - Path to a JSON file containing
                                                pre-computed variable statistics.
                       .verbose_flag          - Flag specifying verbose execution.
@@ -145,8 +143,8 @@ def parse_command_line( argv ):
     # unless requested and execution is quiet by default.
     options.force_flag            = False
     options.input_statistics_path = None
-    options.slice_index_range     = None
-    options.time_index_range      = None
+    options.slice_indices         = None
+    options.time_indices          = None
     options.verbose_flag          = 0
 
     # parse our command line options.
@@ -165,15 +163,23 @@ def parse_command_line( argv ):
         elif option == "-S":
             options.input_statistics_path = option_value
         elif option == "-s":
-            options.slice_index_range = iwp.utilities.parse_range( option_value )
+            try:
+                range_strings = option_value.split( "," )
 
-            if options.slice_index_range is None:
+                options.slice_indices = iwp.utilities.flatten_ranges(
+                    map( lambda range_string: iwp.utilities.parse_range( range_string ),
+                         range_strings ) )
+            except:
                 raise ValueError( "Invalid XY slice range specified ({:s}).".format(
                     option_value ) )
         elif option == "-t":
-            options.time_index_range = iwp.utilities.parse_range( option_value )
+            try:
+                range_strings = option_value.split( "," )
 
-            if options.time_index_range is None:
+                options.time_indices = iwp.utilities.flatten_ranges(
+                    map( lambda range_string: iwp.utilities.parse_range( range_string ),
+                         range_strings ) )
+            except:
                 raise ValueError( "Invalid time index range specified ({:s}).".format(
                     option_value ) )
         elif option == "-v":
@@ -246,10 +252,10 @@ def main( argv ):
 
     # default to the entirety of each dimension if the caller has not specified
     # ranges of interest.
-    if options.time_index_range is None:
-        options.time_index_range = list( xarray_dataset.coords["Cycle"].values )
-    if options.slice_index_range is None:
-        options.slice_index_range = range( len( xarray_dataset.coords["z"] ) )
+    if options.time_indices is None:
+        options.time_indices = list( xarray_dataset.coords["Cycle"].values )
+    if options.slice_indices is None:
+        options.slice_indices = range( len( xarray_dataset.coords["z"] ) )
     if arguments.variable_names is None:
         # identify all grid variables that have a floating point data type.
         # this ignores support variables that have the right shape but aren't
@@ -262,8 +268,8 @@ def main( argv ):
     try:
         iwp.utilities.validate_variables_and_ranges( xarray_dataset,
                                                      arguments.variable_names,
-                                                     options.time_index_range,
-                                                     options.slice_index_range )
+                                                     options.time_indices,
+                                                     options.slice_indices )
     except ValueError as e:
         print( "Failed to validate the request ({:s}).".format(
             str( e ) ) )
@@ -274,15 +280,15 @@ def main( argv ):
         if options.verbose_flag:
             print( "Computing statistics for '{:s}' over T={:d}:{:d} and Z={:d}:{:d}.".format(
                 variable_name,
-                options.time_index_range[0],
-                options.time_index_range[-1],
-                options.slice_index_range[0],
-                options.slice_index_range[-1] ) )
+                options.time_indices[0],
+                options.time_indices[-1],
+                options.slice_indices[0],
+                options.slice_indices[-1] ) )
 
-        da = iwp.utilities.get_xarray_view( xarray_dataset,
-                                            variable_name,
-                                            options.time_index_range,
-                                            options.slice_index_range )
+        da = iwp.utilities.get_xarray_subset( xarray_dataset,
+                                              variable_name,
+                                              options.time_indices,
+                                              options.slice_indices )
 
         local_statistics = iwp.statistics.compute_statistics( da )
 
