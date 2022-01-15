@@ -153,11 +153,18 @@ def array_to_image_PIL( array, quantization_table, color_map, iwp_labels=[], lab
     if (len( title_text ) > 0 or len( iwp_labels ) > 0):
         draw = PIL.ImageDraw.Draw( image )
 
-        # burn in a title if requested.
+        # burn in a title if requested.  use a semi-transparent light gray to
+        # provide some contrast against most colors.
+        #
+        # NOTE: we avoid white since this will blend into the background of most
+        #       IWP grid variables when a divergent colormap, with white in the
+        #       middle, is used, as most grid variables are Gaussian and have
+        #       small values close to zero where the title is burned in.
+        #
         if len( title_text ) > 0:
             draw.text( (5, 5),
                        title_text,
-                       fill=(255, 255, 255, 175) )
+                       fill=(200, 200, 200, 175) )
 
         if len( iwp_labels ) > 0:
             # PIL does not support normalized colors.  attempt scale a
