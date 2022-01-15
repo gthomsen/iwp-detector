@@ -510,7 +510,7 @@ def color_map_to_image( color_map, color_limits, orientation="vertical", figsize
     colorbar_buffer.seek( 0 )
 
     # create a PIL image from the raw bytes.
-    colorbar_image = Image.open( colorbar_buffer )
+    colorbar_image = PIL.Image.open( colorbar_buffer )
 
     return colorbar_image
 
