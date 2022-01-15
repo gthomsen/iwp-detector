@@ -17,11 +17,11 @@
 
 print_usage()
 {
-    echo "${0} [-c] [-D <diameter>] [-f] [-h] [-t] [-v] [-V <var1>[,<var2>[...]]] <output path> <input path>[ <input path>[...]]"
+    echo "${0} [-c] [-D <diameter>] [-f] [-h] [-t] [-v] [-V <var1>[,<var2>[...]]] <output_directory> <input_file>[ <input_file>[...]]"
     echo
     echo "Wrapper script around the netCDF Operators (NCO) suite to prepare IWP datasets"
     echo "for use in analysis and machine learning activities.  One or more files, specified"
-    echo "by <input path>, are processed into <output path> such that one or more of the"
+    echo "by <input_file>, are processed into <output_directory> such that one or more of the"
     echo "following operations is performed:"
     echo
     echo "    1. Chunk variables by XY slice for slice-by-slice access"
@@ -50,15 +50,15 @@ print_usage()
     echo "                             If omitted, the input coordinate systems are copied"
     echo "                             without modification."
     echo "    -f                       Flag forcing overwriting output files beneath"
-    echo "                             <output path>.  If omitted, input files that"
+    echo "                             <output_directory>.  If omitted, input files that"
     echo "                             would overwrite a file are flagged and skipped."
     echo "    -h                       Display this help message and exit."
     echo "    -t                       Enable testing mode.  If specified, the ncap2"
-    echo "                             command to process <input path>s will not be"
+    echo "                             command to process <input_file>s will not be"
     echo "                             executed but rather printed to standard output"
     echo "                             instead."
     echo "    -v                       Enable verbose execution.  If specified, each"
-    echo "                             <input path> is printed to standard output when"
+    echo "                             <input_file> is printed to standard output when"
     echo "                             processed."
     echo "    -V <var1>[,<var2>[...]]  Specifies a comma-delimited list of variable names"
     echo "                             to copy from each <input path> during operations."
