@@ -540,8 +540,8 @@ def parse_command_line( argv ):
     try:
         options.label_color = iwp.utilities.normalize_color_like( options.label_color,
                                                                   validator_type )
-    except ValueError as e:
-        raise ValueError( "Invalid {:s} color specification provided ({:s}).".format(
+    except ValueError:
+        raise ValueError( "Invalid {:s} color specification provided ({}).".format(
             "Matplotlib" if options.render_figure_flag else "PIL",
             options.label_color ) )
 

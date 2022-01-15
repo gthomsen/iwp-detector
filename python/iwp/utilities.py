@@ -280,7 +280,7 @@ def _normalize_iwp_color_like( color_like ):
         color_components = tuple( map( lambda x: float( x ),
                                        color_like.split( ":" ) ) )
     except:
-        raise ValueError( "'{:s}' is not a colon delimited list of numeric values.".format(
+        raise ValueError( "'{}' is not a colon delimited list of numeric values.".format(
             color_like ) )
 
     # ensure that we are either RGB or RGBA.
@@ -365,7 +365,7 @@ def normalize_color_like( color_like, validator_type ):
                 normalized_color_like = tuple( map( lambda x: x / 255.0,
                                                     normalized_color_like ) )
             except ValueError as e:
-                raise ValueError( "'{:s}' is neither a Matplotlib nor IWP color specification ({:s}).".format(
+                raise ValueError( "'{}' is neither a Matplotlib nor IWP color specification ({:s}).".format(
                     color_like,
                     str( e ) ) )
 
@@ -385,7 +385,7 @@ def normalize_color_like( color_like, validator_type ):
             try:
                 normalized_color_like = _normalize_iwp_color_like( color_like )
             except ValueError as e:
-                raise ValueError( "'{:s}' is neither a PIL nor IWP color specification ({:s}).".format(
+                raise ValueError( "'{}' is neither a PIL nor IWP color specification ({:s}).".format(
                     color_like,
                     str( e ) ) )
 
