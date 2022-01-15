@@ -217,7 +217,8 @@ def parse_command_line( argv ):
             else:
                 raise ValueError( "Unknown labeling strategy '{:s}'.  Must be one of: {:s}.".format(
                     option_value,
-                    ", ".join( map( lambda x: x.name.lower() ) ) ) )
+                    ", ".join( map( lambda x: x.lower(),
+                                    sorted( valid_labeling_strategies.keys() ) ) ) ) )
 
     # ensure we have the correct number of arguments.
     if len( positional_arguments ) != NUMBER_ARGUMENTS:
