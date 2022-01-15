@@ -208,7 +208,7 @@ def parse_command_line( argv ):
                 options.image_width  = int( options.image_width )
                 options.image_height = int( options.image_height )
             except ValueError as e:
-                raise ValueError( "Failed to parse <path>:<width>:<height> from '{:s}' ({:s}).".format(
+                raise ValueError( "Failed to parse <path>,<width>,<height> from '{:s}' ({:s}).".format(
                     option_value,
                     str( e ) ) )
         elif option == "-L":
