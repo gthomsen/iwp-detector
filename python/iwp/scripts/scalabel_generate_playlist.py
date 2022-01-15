@@ -245,7 +245,8 @@ def parse_command_line( argv ):
             positional_arguments[ARG_XY_SLICE_RANGE] ) )
 
     # ensure that we're reasonably scaling our labels.
-    if (options.image_width <= 0) or (options.image_height <= 0):
+    if (options.iwp_labels_path is not None and
+        ((options.image_width <= 0) or (options.image_height <= 0))):
         raise ValueError( "Label scaling size is invalid.  Cannot scale to "
                           "{:d} x {:d} pixels.".format(
                               options.image_width,
