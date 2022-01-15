@@ -159,8 +159,8 @@ def main( argv ):
     iwp_labels = iwp.scalabel.extract_iwp_labels_from_frames( scalabel_frames )
 
     try:
-        # switch the labels to a bottom-left coordinate system since Scalabel.ai
-        # labels relative to the top-left.
+        # switch the labels to a bottom-left coordinate system (ij) since
+        # Scalabel.ai labels relative to the top-left (xy).
         iwp.labels.flipud_iwp_label_coordinates( iwp_labels,
                                                  arguments.image_height,
                                                  in_place_flag=True )
