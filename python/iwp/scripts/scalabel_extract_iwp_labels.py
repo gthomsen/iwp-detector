@@ -173,6 +173,9 @@ def main( argv ):
                                                     in_place_flag=True )
 
         # serialize the labels to disk.
+        _ = iwp.labels.sort_iwp_labels( iwp_labels,
+                                        iwp.labels.IWPLabelSortType.TEMPORAL,
+                                        in_place_flag=True )
         iwp.labels.save_iwp_labels( arguments.iwp_labels_path, iwp_labels )
     except Exception as e:
         print( "Failed to write the IWP labels to '{:s}' ({:s}).".format(

@@ -26,6 +26,17 @@ class IWPLabelMergeType( enum.Enum ):
     INTERSECTION = 2
     ERROR        = 3
 
+# enumeration of sort strategies for combining IWP label lists.
+#
+#   none     - concatenate only.  don't sort anything.
+#   spatial  - sort so that time steps are sorted before XY slices.
+#   temporal - sort so that XY slices are sorted before time steps.
+@enum.unique
+class IWPLabelSortType( enum.Enum ):
+    NONE         = 1
+    SPATIAL      = 2
+    TEMPORAL     = 3
+
 def get_iwp_label_key( iwp_label ):
     """
     Retrieves a key that locates the supplied IWP label within the underlying
@@ -136,6 +147,47 @@ def convert_labels_iwp_to_scalabel( iwp_labels ):
 
     return scalabel_labels
 
+def sort_iwp_labels( iwp_labels, sort_type, in_place_flag=False ):
+    """
+    Sorts IWP labels according to the ordering requested.
+
+    Takes 3 arguments:
+
+      iwp_labels    - List of IWP labels.
+      sort_type     - Enumeration of IWPLabelSortType specifying how labels should be
+                      sorted.
+      in_place_flag - Optional flag specifying in place update or an update to a
+                      copy of the labels.  If omitted, defaults to False and a new
+                      list of IWP labels is returned.
+
+    Returns 1 value:
+
+      sorted_iwp_labels - Sorted list of IWP labels.
+
+    """
+
+    # return early if we have nothing to do.
+    if sort_type == IWPLabelSortType.NONE:
+        return iwp_labels
+
+    # create the sort key lambda.
+    if sort_type == IWPLabelSortType.SPATIAL:
+        sort_key = lambda label: (label["z_index"], label["time_step_index"], label["id"])
+    elif sort_type == IWPLabelSortType.TEMPORAL:
+        sort_key = lambda label: (label["time_step_index"], label["z_index"], label["id"])
+    else:
+        raise ValueError( "Unknown IWP label sort type specified! ({})".format(
+            sort_type ) )
+
+    # sort the labels.  respect the request for a copy or not.
+    if in_place_flag:
+        iwp_labels.sort( key=sort_key )
+        sorted_iwp_labels = iwp_labels
+    else:
+        sorted_iwp_labels = sorted( iwp_labels, key=sort_key )
+
+    return sorted_iwp_labels
+
 def save_iwp_labels( iwp_labels_path, iwp_labels, pretty_flag=True ):
     """
     Saves IWP labels to a file.
@@ -151,10 +203,6 @@ def save_iwp_labels( iwp_labels_path, iwp_labels, pretty_flag=True ):
     Returns nothing.
 
     """
-
-    # sort the labels by (time step, z_index, id) to make it easier to review.
-    sorted_iwp = copy.copy( iwp_labels )
-    sorted_iwp.sort( key=lambda label: (label["time_step_index"], label["z_index"], label["id"]) )
 
     with open( iwp_labels_path, "w" ) as iwp_labels_fp:
         #
