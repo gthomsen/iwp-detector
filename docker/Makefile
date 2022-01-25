@@ -10,11 +10,11 @@ CONTAINER_RUNTIME = podman
 
 # environment variables, in the form of VAR=VALUE, to provide the image
 # build.  this is built up based on the run-time configuration.
-BUILD_ENVIRONMENT_VARS=
+BUILD_ENVIRONMENT_VARS =
 
 # container runtime command line options to provide to the image build.
 # this is built up based on the run-time configuration.
-BUILD_OPTIONS=
+BUILD_OPTIONS =
 
 # suffix to use when tagging image names.
 TAG_SUFFIX = latest
