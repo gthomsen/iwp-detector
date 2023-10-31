@@ -531,20 +531,27 @@ def open_xarray_dataset( dataset_path_pattern ):
 
     def add_timestep_as_coord( ds ):
         """
-        Adds the time step as a coordinate so it may be properly concatenated
-        when accessed as a multi-file data set.
+        Adds time-based coordinate so it may be properly concatenated when
+        accessed as a multi-file data set.  Care is detected to identify
+        old-style files with "Cycle" attributes as well as new-style files
+        with "time_step" attributes.
 
-        Takes 1 argument:
+        Takes argument:
 
           ds - xarray.Dataset to modify.
 
         Returns 1 value:
 
-          ds - Modified xarray.Dataset with a "Cycle" coordinate added.
+          ds - Modified xarray.Dataset with the time-based coordinate added.
 
         """
 
-        ds.coords["Cycle"] = ds.attrs["Cycle"]
+        if "Cycle" in ds.attrs:
+            time_step_attribute = "Cycle"
+        else:
+            time_step_attribute = "time_step"
+
+        ds.coords[time_step_attribute] = ds.attrs[time_step_attribute]
 
         return ds
 
@@ -559,14 +566,35 @@ def open_xarray_dataset( dataset_path_pattern ):
     if (type( dataset_path_pattern ) == list) and (len( dataset_path_pattern ) == 1):
         dataset_path_pattern = dataset_path_pattern[0]
 
-    # each timestep is processed independently of the others, so we specify
-    # nested concatenation across Cycles.  we preprocess each dataset as its
-    # read to promote the Cycle attribute to a coordinate so it may be
+    # each timestep is generated independently of the others, so we specify
+    # nested concatenation across timesteps.  we preprocess each dataset as its
+    # read to promote the timestep attribute to a coordinate so it may be
     # concatenated.
-    ds = xr.open_mfdataset( dataset_path_pattern,
-                            parallel=True,
-                            combine="nested",
-                            concat_dim=["Cycle"],
-                            preprocess=add_timestep_as_coord )
+    #
+    # NOTE: we cannot detect if we have an old-style or new-style file until
+    #       we open the dataset and have access to its attributes.  iterate
+    #       through the time-based attributes ordered by frequency we'll
+    #       encounter them.  while opening each file in parallel, for each
+    #       style, can be costly we'll almost always open the file once as
+    #       new-style files will be generated for several years, while old-style
+    #       files have not been created for several years (and will eventually
+    #       disappear).
+    #
+    for time_step_attribute in ["time_step", "Cycle"]:
+        try:
+            ds = xr.open_mfdataset( dataset_path_pattern,
+                                    parallel=True,
+                                    combine="nested",
+                                    concat_dim=[time_step_attribute],
+                                    preprocess=add_timestep_as_coord )
+            break
+        except:
+            # we don't do anything when we can't open a particular style of
+            # field data.  below we raise an exception should this dataset
+            # not match any of the known styles.
+            pass
+    else:
+        raise RuntimeError( "Could not open '{:s}' as any known format of field data.".format(
+            dataset_path_pattern ) )
 
     return ds

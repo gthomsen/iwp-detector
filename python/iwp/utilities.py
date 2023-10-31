@@ -156,7 +156,10 @@ def validate_variables_and_ranges( dataset, variable_names, time_step_indices, x
     """
 
     if isinstance( dataset, (xarray.Dataset, xarray.DataArray) ):
-        truth_time_step_indices = dataset.coords["Cycle"]
+        if "Cycle" in dataset.coords:
+            truth_time_step_indices = dataset.coords["Cycle"]
+        else:
+            truth_time_step_indices = dataset.coords["time_step"]
         truth_xy_slice_indices  = dataset.coords["z"]
         truth_variable_names    = dataset.data_vars
     elif isinstance( dataset, iwp.data_loader.IWPDataset ):
@@ -222,9 +225,14 @@ def get_xarray_subset( dataset, variable_name, time_step_indices, xy_slice_indic
     #       globbing, meaning time steps may not increase monotonically, meaning
     #       we should select time steps by value.
     #
-    data_array = (dataset[variable_name]
-                  .sel( Cycle=time_step_indices )
-                  .isel( z=xy_slice_indices ))
+    if "Cycle" in dataset.attrs:
+        data_array = (dataset[variable_name]
+                      .sel( Cycle=time_step_indices )
+                      .isel( z=xy_slice_indices ))
+    else:
+        data_array = (dataset[variable_name]
+                      .sel( time_step=time_step_indices )
+                      .isel( z=xy_slice_indices ))
 
     return data_array
 

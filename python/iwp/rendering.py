@@ -615,7 +615,10 @@ def da_write_xy_slice_images( da, output_root, experiment_name, xy_slice_indices
     #       value (i.e. Nt or buoyancy time).  correcting the conflation
     #       between indices and values will be dealt with at a later date.
     #
-    time_step_value = da.Cycle.values[0]
+    if "Cycle" in da:
+        time_step_value = da.Cycle.values[0]
+    else:
+        time_step_value = da.time_step.values[0]
 
     # create 8-bit quantization tables since we're generating images.
     number_table_entries = 256

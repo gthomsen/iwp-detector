@@ -42,14 +42,19 @@ class XDMFGenerator( object ):
     #         2. the simulation domain's geometry must be "VXVYVZ".  this
     #            causes the XDMF reader to expect vectors for each of the
     #            coordinate axes.  the implicit outer product of each of the
-    #            axes (X, Y, and Z) specify the 3D mesh used.  no other
-    #            specification of the geometry can be specified per
-    #            the ParaView developer Utkarsh Ayachit:
+    #            axes (X, Y, and Z, in whichever order they're written) specify
+    #            the 3D mesh used.  no other specification of the geometry can
+    #            be specified per the ParaView developer Utkarsh Ayachit:
     #
     #              https://vtk.org/Bug/view.php?id=9582#c17728
     #
     #            while this ensures there is only a single way to specify
     #            a rectilinear mesh, it is by no means well documented...
+    #
+    #
+    # NOTE: the Geometry node needs the dimensions ordered fastest to
+    #       slowest.  this is confusing since the Topology's dimensions
+    #       are specified slowest to fastest.
     #
     _xdmf_fragment = """<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>
@@ -57,27 +62,25 @@ class XDMFGenerator( object ):
     <Domain>
 
         <!--
-             Define a 3D rectilinear mesh (shaped {dimension_x:d}x{dimension_y:d}x{dimension_z:d}) and specify each of the
-             axes in three, 1D vectors.
+             Define a 3D rectilinear mesh (shaped {dimensions_list_shape:s}) and specify each of the
+             axes in three 1D vectors.
 
-             NOTE: The (X, Y, Z) grid is specified in C-major order with the fastest
-                   dimension on the right, causing the dimensions specification to be
-                   reversed as (Z, Y, X).
+             NOTE: The grid is ({dimensions_list_commas:s}) and {fastest_dimension:s} is the innermost dimension,
+                   growing fastest.
+
         -->
 
         <Grid Name="simulation_domain" GridType="Uniform">
-            <Topology TopologyType="3DRectMesh" Dimensions="{dimension_z:d} {dimension_y:d} {dimension_x:d}"/>
+            <Topology TopologyType="3DRectMesh" Dimensions="{dimensions_list_whitespace:s}"/>
 
-            <Geometry GeometryType="VXVYVZ">
-                <DataItem Name="X" Dimensions="{dimension_x:d}" NumberType="{number_type_x:s}" Precision="{size_bytes_x:d}" Format="HDF">
-                    {coordinates_path}:/x
-                </DataItem>
-                <DataItem Name="Y" Dimensions="{dimension_y:d}" NumberType="{number_type_y:s}" Precision="{size_bytes_y:d}" Format="HDF">
-                    {coordinates_path}:/y
-                </DataItem>
-                <DataItem Name="Z" Dimensions="{dimension_z:d}" NumberType="{number_type_z:s}" Precision="{size_bytes_z:d}" Format="HDF">
-                    {coordinates_path}:/z
-                </DataItem>
+            <!--
+                 The grid's geometry is specified as it is arranged on disk with
+                 dimensions ordered fastest to slowest.
+
+                 NOTE: This is reversed from the <Topology> node above!
+
+            -->
+            <Geometry GeometryType="VXVYVZ">{geometry_fragment:s}
             </Geometry>
 
         </Grid>
@@ -88,6 +91,22 @@ class XDMFGenerator( object ):
     </Domain>
 </Xdmf>
 """
+
+    # fragments describing the individual spatial dimensions, X, Y and Z.
+    _geometry_x_fragment="""
+                <DataItem Name="X" Dimensions="{dimension_x:d}" NumberType="{number_type_x:s}" Precision="{size_bytes_x:d}" Format="HDF">
+                    {coordinates_path}:/x
+                </DataItem>"""
+    _geometry_y_fragment="""
+                <DataItem Name="Y" Dimensions="{dimension_y:d}" NumberType="{number_type_y:s}" Precision="{size_bytes_y:d}" Format="HDF">
+                    {coordinates_path}:/y
+                </DataItem>"""
+    _geometry_z_fragment="""
+                <DataItem Name="Z" Dimensions="{dimension_z:d}" NumberType="{number_type_z:s}" Precision="{size_bytes_z:d}" Format="HDF">
+                    {coordinates_path}:/z
+                </DataItem>"""
+
+    # fragment describing a single time step in the dataset.
     _time_step_fragment = """
             <Grid Name="{time_step:d}" GridType="Uniform">
                 <Time Value="{time_step:d}" />
@@ -99,9 +118,10 @@ class XDMFGenerator( object ):
             </Grid>
 """
 
+    # fragment describing a single variable in a time step.
     _variable_fragment = """
                 <Attribute Name="{variable_name:s}" AttributeType="Scalar" Center="Node">
-                    <DataItem NumberType="Float" Precision="{variable_byte_size:d}" Dimensions="{dimension_z:d} {dimension_y:d} {dimension_x:d}" Format="HDF">
+                    <DataItem NumberType="Float" Precision="{variable_byte_size:d}" Dimensions="{dimensions_list_whitespace:s}" Format="HDF">
                     {file_path:s}:/{variable_name:s}
                     </DataItem>
                 </Attribute>"""
@@ -159,9 +179,16 @@ class XDMFGenerator( object ):
         # one entry per variable in _variable_names.
         self._dtype_map = {}
 
-        # 4-tuple specifying the shape of the grid variables, ordered as
-        # (time, z, y, x), as stored within the netCDF4 datasets.
-        self._grid_shape = ()
+        # 4-tuples specifying the shape and names of the dimensions for the grid
+        # variables, ordered as (time, ?, ?, ?), as stored within the netCDF4
+        # datasets.  the order of the spatial dimensions depends on the dataset
+        # and is described by _dimension_names.
+        #
+        # NOTE: Python indexing means that the last dimension is the innermost
+        #       and, therefore, the fastest.
+        #
+        self._grid_shape      = ()
+        self._dimension_names = ()
 
         # create a map from dataset path templates to a list of overriden
         # variables.  we use this so we only validate the override datasets
@@ -214,6 +241,11 @@ class XDMFGenerator( object ):
              self._dtype_map) = self._open_and_validate_dataset( dataset_paths,
                                                                  dataset_variable_names,
                                                                  time_step_indices )
+
+            # the datasets are valid and consistent, now track the order of the
+            # grid variables' dimensions.  the choice of grid variable is
+            # arbitrary since they all have the same shape.
+            self._dimension_names = master_dataset["u"].dims
 
             # we no longer need the underlying dataset.  all XDMF generation is done
             # from the metadata we've acquired.
@@ -270,30 +302,30 @@ class XDMFGenerator( object ):
 
         Takes 5 arguments:
 
-          dataset_paths     - List of path names comprising the netCDF4 dataset.  The
-                              order matches that supplied in time_step_indices.
-          variable_names    - List of variable names to validate exist in each of
-                              the dataset paths in dataset_paths.
-          time_step_indices - List of time step indices to validate exist in the
-                              dataset.  The i-th time step index must exist in the
-                              i-th dataset path.
-          target_grid_shape - Optional 4-tuple specifying the expected grid variables'
-                              shape, with (time, x, y, z) as the ordering.  All grid
-                              variables must have this shape to pass validation.  If
-                              omitted, defaults to the shape of the first entry in
-                              variable_names.
-          target_dtype_map  - Optional dictionary mapping variable names to numpy.dtype
-                              strings (e.g. 'float32').  Each variable in variable_names
-                              must have the expected data type.  If omitted, or if it
-                              does not include one of variable_names' variables, no data
-                              type validation is performed.
+          dataset_paths       - List of path names comprising the netCDF4 dataset.  The
+                                order matches that supplied in time_step_indices.
+          variable_names      - List of variable names to validate exist in each of
+                                the dataset paths in dataset_paths.
+          time_step_indices   - List of time step indices to validate exist in the
+                                dataset.  The i-th time step index must exist in the
+                                i-th dataset path.
+          target_grid_shape   - Optional 4-tuple specifying the expected grid variables'
+                                shape, with (time, x, y, z) as the ordering.  All grid
+                                variables must have this shape to pass validation.  If
+                                omitted, defaults to the shape of the first entry in
+                                variable_names.
+          target_dtype_map    - Optional dictionary mapping variable names to numpy.dtype
+                                strings (e.g. 'float32').  Each variable in variable_names
+                                must have the expected data type.  If omitted, or if it
+                                does not include one of variable_names' variables, no data
+                                type validation is performed.
 
         Returns 3 values:
 
           dataset       - xarray.Dataset opened from dataset_paths.
           grid_shape    - 4-tuple specifying the grid variables' shape with (time, x, y, z)
                           as the ordering.
-          dtype_map - Dictionary mapping variable names to numpy.dtype strings (e.g.
+          dtype_map     - Dictionary mapping variable names to numpy.dtype strings (e.g.
                           'float32').  Provides a mapping for each of the variables in
                           variable_names.
 
@@ -489,11 +521,11 @@ class XDMFGenerator( object ):
                     variable_name,
                     ", ".join( map( lambda x: "'" + x + "'", self._variable_names ) ) ) )
 
-        # decompose the grid into individual dimensions.  we skip the leading
-        # time dimension.
-        dimension_x = self._grid_shape[3]
-        dimension_y = self._grid_shape[2]
-        dimension_z = self._grid_shape[1]
+        # decompose the grid into individual spatial dimensions.  we skip the
+        # leading time dimension.
+        dimension_x = self._grid_shape[self._dimension_names.index( "x" )]
+        dimension_y = self._grid_shape[self._dimension_names.index( "y" )]
+        dimension_z = self._grid_shape[self._dimension_names.index( "z" )]
 
         dtype_x = np.dtype( self._dtype_map["x"] )
         dtype_y = np.dtype( self._dtype_map["y"] )
@@ -511,6 +543,50 @@ class XDMFGenerator( object ):
         number_type_y = numpy_dtype_to_xdmf_number_type( dtype_y )
         number_type_z = numpy_dtype_to_xdmf_number_type( dtype_z )
 
+        # get the spatial dimensions in the order the user sees.  this is used
+        # for documentation as well as describing what is contained in the
+        # underlying netCDF file.
+        #
+        # NOTE: we create a list since we join it multiple times and a map
+        #       object does not reset after use.
+        #
+        spatial_dimensions     = slice( 1, 4 )
+        spatial_dimensions_str = list( map( lambda dim: str( dim ),
+                                            self._grid_shape[spatial_dimensions] ) )
+
+        # create the strings holding the spatial dimensions, each with different
+        # separators.
+        dimensions_shape      = "x".join( spatial_dimensions_str )
+        dimensions_commas     = ", ".join( spatial_dimensions_str )
+        dimensions_whitespace = " ".join( spatial_dimensions_str )
+
+        # walk through the dimensions fastest to slowest.  the Geometry node
+        # specifies the dimensions in the same order as the data are arranged on
+        # disk.
+        geometry_fragment = ""
+        for dimension_name in self._dimension_names[-1:0:-1]:
+            if dimension_name == "x":
+                geometry_fragment += XDMFGenerator._geometry_x_fragment.format(
+                    coordinates_path=self._dataset_path_template.format( time_step_indices[0] ),
+                    dimension_x=dimension_x,
+                    number_type_x=number_type_x,
+                    size_bytes_x=size_bytes_x
+                    )
+            elif dimension_name == "y":
+                geometry_fragment += XDMFGenerator._geometry_y_fragment.format(
+                    coordinates_path=self._dataset_path_template.format( time_step_indices[0] ),
+                    dimension_y=dimension_y,
+                    number_type_y=number_type_y,
+                    size_bytes_y=size_bytes_y
+                    )
+            elif dimension_name == "z":
+                geometry_fragment += XDMFGenerator._geometry_z_fragment.format(
+                    coordinates_path=self._dataset_path_template.format( time_step_indices[0] ),
+                    dimension_z=dimension_z,
+                    number_type_z=number_type_z,
+                    size_bytes_z=size_bytes_z
+                    )
+
         # build each time step's XML, one at a time.
         time_step_fragments = ""
         for time_step_index in time_step_indices:
@@ -525,12 +601,10 @@ class XDMFGenerator( object ):
 
                 # instantiate the variable fragment.
                 variable_fragments += XDMFGenerator._variable_fragment.format(
+                    dimensions_list_whitespace=dimensions_whitespace,
                     file_path=dataset_path,
                     variable_name=variable_name,
-                    variable_byte_size=variable_dtype.itemsize,
-                    dimension_x=dimension_x,
-                    dimension_y=dimension_y,
-                    dimension_z=dimension_z )
+                    variable_byte_size=variable_dtype.itemsize )
 
             # instantiate the time step fragment.
             time_step_fragments += XDMFGenerator._time_step_fragment.format(
@@ -540,16 +614,11 @@ class XDMFGenerator( object ):
         # instantiate the document.  fill in the grid characteristics and
         # assemble the time steps.
         xdmf_document = XDMFGenerator._xdmf_fragment.format(
-            coordinates_path=self._dataset_path_template.format( time_step_indices[0] ),
-            number_type_x=number_type_x,
-            number_type_y=number_type_y,
-            number_type_z=number_type_z,
-            size_bytes_x=size_bytes_x,
-            size_bytes_y=size_bytes_y,
-            size_bytes_z=size_bytes_z,
-            dimension_x=dimension_x,
-            dimension_y=dimension_y,
-            dimension_z=dimension_z,
+            dimensions_list_commas=dimensions_commas,
+            dimensions_list_shape=dimensions_shape,
+            dimensions_list_whitespace=dimensions_whitespace,
+            fastest_dimension=self._dimension_names[-1].upper(),
+            geometry_fragment=geometry_fragment,
             time_step_fragments=time_step_fragments )
 
         return xdmf_document
