@@ -16,6 +16,7 @@ setup(
         "iwp/scripts/iwp_merge_labels.py",
         "iwp/scripts/iwp_postprocess_netcdf.py",
         "iwp/scripts/scalabel_extract_iwp_labels.py",
-        "iwp/scripts/scalabel_generate_playlist.py"
+        "iwp/scripts/scalabel_generate_playlist.py",
+        "iwp/scripts/xdmf_generate.py"
     ]
     )
